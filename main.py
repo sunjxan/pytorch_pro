@@ -1,0 +1,152 @@
+import torch
+import torchvision as tv
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import time
+
+
+epochs = 3
+batch_size_train = 64
+batch_size_test = 1000
+learning_rate = 0.01
+momentum = 0.5
+dropout_rate = 0.5
+
+
+# 转换器，将PIL Image转换为Tensor
+transform = tv.transforms.Compose([tv.transforms.ToTensor()])
+# 训练集，(60000, 2, 1, 28, 28)
+train_set = tv.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+# 测试集，(10000, 2, 1, 28, 28)
+test_set = tv.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+# 训练数据生成器
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size_train, shuffle=True)
+# 测试数据生成器
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size_test, shuffle=False)
+
+
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=10, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2), padding_mode='zeros')
+        self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.conv2 = nn.Conv2d(in_channels=10, out_channels=20, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2), padding_mode='zeros')
+        self.pool2 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
+        self.fc1 = nn.Linear(in_features=20*7*7, out_features=50)
+        self.fc2 = nn.Linear(in_features=50, out_features=10)
+        self.dropout = nn.Dropout(dropout_rate)
+        self._init_parameters()
+
+    def forward(self, x):
+        # (64, 1, 28, 28)
+        x = F.relu(self.pool1(self.conv1(x)))
+        # (64, 10, 14, 14)
+        x = F.relu(self.pool2(self.conv2(x)))
+        # (64, 20, 7, 7)
+        x = nn.Flatten()(x)
+        # (64, 980)
+        x = F.relu(self.fc1(x))
+        # (64, 50)
+        x = self.dropout(x)
+        # (64, 50)
+        x = self.fc2(x)
+        # (64, 10)
+        return x
+
+    def _init_parameters(self):
+        for layer in self.modules():
+            if isinstance(layer, nn.Conv2d):
+                nn.init.kaiming_normal_(layer.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.zeros_(layer.bias)
+            elif isinstance(layer, nn.Linear):
+                nn.init.normal_(layer.weight, 0, 0.01)
+                nn.init.zeros_(layer.bias)
+
+
+# 设备
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print(device)
+# 模型
+model = Net().to(device)
+# 损失函数
+criterion = nn.CrossEntropyLoss()
+# 优化器
+optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+
+
+steps_per_epoch = len(train_loader)
+train_images = 0
+train_counter = []
+train_losses = []
+
+for epoch_index in range(epochs):
+    epoch_begin = time.time()
+
+    for batch_index, (images, labels) in enumerate(train_loader):
+        step_begin = time.time()
+
+        images = images.to(device)
+        labels = labels.to(device)
+
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        step_end = time.time()
+
+        train_images += batch_size_train
+        train_counter.append(train_images)
+        train_losses.append(loss.item())
+
+        print('Epoch {}/{}  Step {}/{}  Time: {:.0f}ms  Loss: {:.6f}'.format(epoch_index + 1, epochs, batch_index + 1, steps_per_epoch, (step_end - step_begin) * 1e3, loss.item()))
+
+    epoch_end = time.time()
+
+    print('Epoch {}/{}  Time: {:.1f}s  Avg Loss: {:.6f}'.format(epoch_index + 1, epochs, epoch_end - epoch_begin, sum(train_losses[-steps_per_epoch:]) / steps_per_epoch))
+
+
+torch.save(model.state_dict(), 'parameters.pt')
+torch.save(optimizer.state_dict(), 'optimizer.pt')
+torch.save(model, 'model.pt')
+
+model = Net()
+model.load_state_dict(torch.load('parameters.pt'))
+model = model.to(device)
+optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+optimizer.load_state_dict(torch.load('optimizer.pt'))
+
+
+steps_test = len(test_loader)
+test_images = 0
+correct_images = 0
+test_losses_sum = 0
+with torch.no_grad():
+    for batch_index, (images, labels) in enumerate(test_loader):
+        step_begin = time.time()
+
+        images = images.to(device)
+        labels = labels.to(device)
+
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+
+        step_end = time.time()
+
+        correct_images += (torch.argmax(outputs, -1) == labels).sum().item()
+        test_images += batch_size_test
+        test_losses_sum += loss.item()
+
+        print('Step {}/{}  Time: {:.0f}ms  Avg Loss: {:.6f}'.format(batch_index + 1, steps_test, (step_end - step_begin) * 1e3, test_losses_sum / steps_test))
+print('Test  Avg Loss: {:.6f}  Accuracy: {}/{} ({:.1f}%)'.format(test_losses_sum / steps_test, correct_images, test_images, 1e2 * correct_images / test_images))
+
+
+import matplotlib.pyplot as plt
+fig = plt.figure()
+plt.plot(train_counter, train_losses, color='blue')
+plt.legend(['Train Loss'], loc='upper right')
+plt.xlabel('number of training images')
+plt.ylabel('negative log likelihood loss')
+plt.show()
