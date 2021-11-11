@@ -1,4 +1,7 @@
 .idea
 data
+runs
 *.pt
+*.pth
+*.pkl
 *.png
