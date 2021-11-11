@@ -126,7 +126,7 @@ torch.save(optimizer.state_dict(), 'optimizer.pt')
 
 model2 = Net()
 if cuda_available and device_count > 1:
-    model2 = nn.DataParallel(model2, device_ids=list(range(len(device_ids))), output_device=0)
+    model2 = nn.DataParallel(model2, device_ids=list(range(device_count)), output_device=0)
 model2.load_state_dict(torch.load('parameters.pt'))
 model2 = model2.to(device)
 optimizer2 = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
@@ -173,7 +173,7 @@ torch.save(model2, 'model.pt')
 
 model3 = torch.load('model.pt')
 if cuda_available and device_count > 1:
-    model3 = nn.DataParallel(model3, device_ids=list(range(len(device_ids))), output_device=0)
+    model3 = nn.DataParallel(model3, device_ids=list(range(device_count)), output_device=0)
 model3 = model3.to(device)
 
 
