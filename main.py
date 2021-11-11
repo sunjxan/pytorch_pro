@@ -70,7 +70,7 @@ class Net(nn.Module):
 
 
 # 设备
-# 执行前设置环境变量 export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
+# 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 mnist.py
 cuda_available = torch.cuda.is_available()
 if cuda_available:
     device_count = torch.cuda.device_count()
