@@ -72,7 +72,7 @@ class Net(nn.Module):
                 nn.init.zeros_(layer.bias)
 
 
-# 可视化，tensorboard --logdir=runs
+# 可视化，tensorboard --logdir=runs --bind_all
 writer = SummaryWriter()
 # 设备
 # 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 mnist.py
