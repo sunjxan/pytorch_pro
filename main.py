@@ -70,8 +70,7 @@ class Net(nn.Module):
 
 
 # 设备
-device_ids = [3, 4, 5, 6]
-os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(lambda x: str(x), device_ids))
+# 执行前设置环境变量 export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 cuda_available = torch.cuda.is_available()
 if cuda_available:
     device_count = torch.cuda.device_count()
@@ -82,7 +81,7 @@ device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
 model = Net()
 if cuda_available and device_count > 1:
-    model = nn.DataParallel(model, device_ids=list(range(len(device_ids))), output_device=0)
+    model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
 model = model.to(device)
 # 损失函数
 criterion = nn.CrossEntropyLoss()
