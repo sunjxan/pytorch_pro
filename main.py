@@ -96,13 +96,14 @@ optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
 
 global_step = 0
 steps_per_epoch = len(train_loader)
-input_images = 0
 correct_images = 0
 
 for epoch_index in range(epochs):
     epoch_begin = time.time()
 
     for batch_index, (images, labels) in enumerate(train_loader):
+        input_images = images.shape[0]
+        
         step_begin = time.time()
 
         images = images.to(device)
@@ -116,14 +117,12 @@ for epoch_index in range(epochs):
 
         step_end = time.time()
 
-        correct_images += (torch.argmax(outputs, -1) == labels).sum().item()
-        input_images += batch_size_train
-
         global_step += 1
+        correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
         writer.add_scalar('train/loss', loss.item(), global_step)
         writer.add_scalar('train/accuracy', correct_images / input_images, global_step)
 
-        print('Epoch {}/{}  Step {}/{}  Time: {:.0f}ms  Loss: {:.6f}  Accuracy: {:.1f}%'.format(epoch_index + 1, 2 * epochs, batch_index + 1, steps_per_epoch, (step_end - step_begin) * 1e3, loss.item(), 1e2 * correct_images / input_images))
+        print('Epoch {}/{}  Step {}/{}  Time: {:.0f}ms  Loss: {:.6f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, 2 * epochs, batch_index + 1, steps_per_epoch, (step_end - step_begin) * 1e3, loss.item(), correct_images, input_images, 1e2 * correct_images / input_images))
 
     epoch_end = time.time()
     print('[Epoch {}/{}]  Time: {:.1f}s'.format(epoch_index + 1, 2 * epochs, epoch_end - epoch_begin))
@@ -145,6 +144,8 @@ for epoch_index in range(epochs, 2 * epochs):
     epoch_begin = time.time()
 
     for batch_index, (images, labels) in enumerate(train_loader):
+        input_images = images.shape[0]
+    
         step_begin = time.time()
 
         images = images.to(device)
@@ -158,14 +159,12 @@ for epoch_index in range(epochs, 2 * epochs):
 
         step_end = time.time()
 
-        correct_images += (torch.argmax(outputs, -1) == labels).sum().item()
-        input_images += batch_size_train
-
         global_step += 1
+        correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
         writer.add_scalar('train/loss', loss.item(), global_step)
         writer.add_scalar('train/accuracy', correct_images / input_images, global_step)
 
-        print('Epoch {}/{}  Step {}/{}  Time: {:.0f}ms  Loss: {:.6f}  Accuracy: {:.1f}%'.format(epoch_index + 1, 2 * epochs, batch_index + 1, steps_per_epoch, (step_end - step_begin) * 1e3, loss.item(), 1e2 * correct_images / input_images))
+        print('Epoch {}/{}  Step {}/{}  Time: {:.0f}ms  Loss: {:.6f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, 2 * epochs, batch_index + 1, steps_per_epoch, (step_end - step_begin) * 1e3, loss.item(), correct_images, input_images, 1e2 * correct_images / input_images))
 
     epoch_end = time.time()
     print('[Epoch {}/{}]  Time: {:.1f}s'.format(epoch_index + 1, 2 * epochs, epoch_end - epoch_begin))
@@ -181,12 +180,15 @@ model3 = model3.to(device)
 
 global_step = 0
 steps_total = len(test_loader)
-input_images = 0
-correct_images = 0
+step_correct_images = 0
+total_correct_images = 0
+total_input_images = len(test_set)
 
 with torch.no_grad():
     test_begin = time.time()
     for batch_index, (images, labels) in enumerate(test_loader):
+        step_input_images = images.shape[0]
+        
         step_begin = time.time()
 
         images = images.to(device)
@@ -197,15 +199,14 @@ with torch.no_grad():
 
         step_end = time.time()
 
-        correct_images += (torch.argmax(outputs, -1) == labels).sum().item()
-        input_images += batch_size_test
-
         global_step += 1
+        step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
+        total_correct_images += step_correct_images
         writer.add_scalar('test/loss', loss.item(), global_step)
-        writer.add_scalar('test/accuracy', correct_images / input_images, global_step)
+        writer.add_scalar('test/accuracy', step_correct_images / step_input_images, global_step)
 
-        print('Step {}/{}  Time: {:.0f}ms  Loss: {:.6f}  Accuracy: {:.1f}%'.format(batch_index + 1, steps_total, (step_end - step_begin) * 1e3, loss.item(), 1e2 * correct_images / input_images))
+        print('Step {}/{}  Time: {:.0f}ms  Loss: {:.6f}  Accuracy: {}/{} ({:.1f}%)'.format(batch_index + 1, steps_total, (step_end - step_begin) * 1e3, loss.item(), step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
     test_end = time.time()
-print('[Test]  Time: {:.1f}s  Accuracy: {}/{} ({:.1f}%)'.format(test_end - test_begin, correct_images, input_images, 1e2 * correct_images / input_images))
+print('[Test]  Time: {:.1f}s  Accuracy: {}/{} ({:.1f}%)'.format(test_end - test_begin, total_correct_images, total_input_images, 1e2 * total_correct_images / total_input_images))
 
 writer.close()
