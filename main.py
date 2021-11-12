@@ -120,21 +120,21 @@ for epoch_index in range(epochs):
         optimizer.step()
 
         step_end = time.time()
-        step_period = step_end - step_begin
+        step_period = round((step_end - step_begin) * 1e3)
 
         global_step += 1
         step_loss = loss.item()
+        epoch_loss_sum += step_loss * step_input_images
         step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
         epoch_correct_images += step_correct_images
-        epoch_loss_sum += step_loss
         writer.add_scalar('train/loss', step_loss, global_step)
         writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)
 
-        print('Epoch {}/{}  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, 2 * epochs, batch_index + 1, steps_per_epoch, int(step_period), int(step_period * 1e3) % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+        print('Epoch {}/{}  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, 2 * epochs, batch_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
 
     epoch_end = time.time()
-    epoch_period = epoch_end - epoch_begin
-    print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, 2 * epochs, int(epoch_period), int(epoch_period * 1e3) % 1e3, epoch_loss_sum / steps_per_epoch, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
+    epoch_period = round((epoch_end - epoch_begin) * 1e3)
+    print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, 2 * epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
 
 
 torch.save(model.state_dict(), 'parameters.pkl')
