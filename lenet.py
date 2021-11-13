@@ -10,78 +10,74 @@ import os, time
 
 epochs = 10
 batch_size_train = 64
-batch_size_val = 1000
+batch_size_test = 1000
 learning_rate = 0.01
 momentum = 0.5
 
 
 # 转换器，将PIL Image转换为Tensor
 transform = tv.transforms.Compose([tv.transforms.ToTensor()])
-# 训练集（有标签），(100000, 2, 3, 64, 64)
-train_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/train', transform=transform)
-# 验证集（有标签），(10000, 2, 3, 64, 64)
-val_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/val', transform=transform)
-# 测试集（无标签），(10000, 2, 3, 64, 64)
-test_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/test', transform=transform)
+if not os.path.isdir('./data/MNIST'):
+    # 训练集，(60000, 2, 1, 28, 28)
+    train_set = tv.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+    # 测试集，(10000, 2, 1, 28, 28)
+    test_set = tv.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+else:
+    train_set = tv.datasets.MNIST(root='./data', train=True, download=False, transform=transform)
+    test_set = tv.datasets.MNIST(root='./data', train=False, download=False, transform=transform)
 # 训练数据生成器
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size_train, shuffle=True)
 # 测试数据生成器
-val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size_val, shuffle=False)
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size_test, shuffle=False)
 
 
-class AlexNet(nn.Module):
+class LeNet(nn.Module):
     def __init__(self):
+        # 为提高精度，将AvgPool2d改为MaxPool2d，Sigmoid改为ReLU
         super().__init__()
         self.features = nn.Sequential(
-            # (B, 3, W, H)
-            nn.Conv2d(3, 64, kernel_size=(11, 11), stride=(4, 4), padding=(2, 2)),
-            # (B, 64, W1=math.ceil((W - 6) / 4), H1=math.ceil((H - 6) / 4))
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=0, dilation=1, ceil_mode=False),
-            # (B, 64, W2=math.ceil(W1 / 2 - 1), H2=math.ceil(H1 / 2 - 1))
-            nn.Conv2d(64, 192, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)),
-            # (B, 192, W2, H2)
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=0, dilation=1, ceil_mode=False),
-            # (B, 192, W3=math.ceil(W2 / 2 - 1), H3=math.ceil(H2 / 2 - 1))
-            nn.Conv2d(192, 384, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            # (B, 384, W3, H3)
-            nn.ReLU(inplace=True),
-            nn.Conv2d(384, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            # (B, 256, W3, H3)
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            # (B, 256, W3, H3)
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=0, dilation=1, ceil_mode=False)
-            # (B, 256, W4=math.ceil(W3 / 2 - 1), H4=math.ceil(H3 / 2 - 1))
+            # (B, 1, 28, 28)
+            # 因为MNIST图片大小为28*28，不是32*32，所以修改padding为2
+            nn.Conv2d(1, 6, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)),
+            # (B, 6, 28, 28)
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=0, ceil_mode=False),
+            # (B, 6, 14, 14)
+            nn.Conv2d(6, 16, kernel_size=(5, 5), stride=(1, 1), padding=(0, 0)),
+            # (B, 16, 10, 10)
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=0, ceil_mode=False)
+            # (B, 16, 5, 5)
         )
-        self.avgpool = nn.AdaptiveAvgPool2d(output_size=(6, 6))
-        # (B, 256, 6, 6)
         self.classifier = nn.Sequential(
-            # (B, 9216)
-            nn.Dropout(p=0.5, inplace=False),
-            nn.Linear(in_features=9216, out_features=4096, bias=True),
-            # (B, 4096)
-            nn.ReLU(inplace=True),
-            nn.Dropout(p=0.5, inplace=False),
-            nn.Linear(in_features=4096, out_features=4096, bias=True),
-            # (B, 4096)
-            nn.ReLU(inplace=True),
-            nn.Linear(in_features=4096, out_features=1000, bias=True)
-            # (B, 1000)
+            # (B, 400)
+            nn.Linear(in_features=400, out_features=120, bias=True),
+            # (B, 120)
+            nn.ReLU(),
+            nn.Linear(in_features=120, out_features=84, bias=True),
+            # (B, 84)
+            nn.ReLU(),
+            nn.Linear(in_features=84, out_features=10, bias=True)
+            # (B, 10)
         )
-        self.load_state_dict(torch.load("/home/sunjian/.cache/torch/hub/checkpoints/alexnet-owt-7be5be79.pth"))
+        self._init_parameters()
     def forward(self, x):
         x = self.features(x)
-        x = self.avgpool(x)
         x = nn.Flatten()(x)
         x = self.classifier(x)
         return x
+    def _init_parameters(self):
+        for layer in self.modules():
+            if isinstance(layer, nn.Conv2d):
+                nn.init.kaiming_normal_(layer.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.zeros_(layer.bias)
+            elif isinstance(layer, nn.Linear):
+                nn.init.normal_(layer.weight, 0, 0.01)
+                nn.init.zeros_(layer.bias)
 
 
 # 可视化 tensorboard --logdir=runs --bind_all
-writer = SummaryWriter(logdir='runs-alexnet')
+writer = SummaryWriter(logdir='runs-lenet')
 # 设备
 # 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 mnist.py
 cuda_available = torch.cuda.is_available()
@@ -93,8 +89,8 @@ else:
 # 程序中会对可见GPU重新从0编号
 device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
-model = AlexNet()
-writer.add_graph(model, (torch.zeros(1, 3, 64, 64), ))
+model = LeNet()
+writer.add_graph(model, (torch.zeros(1, 1, 28, 28), ))
 if cuda_available and device_count > 1:
     model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
 model = model.to(device)
@@ -153,15 +149,15 @@ fit(model, optimizer, epochs, 1)
 def evaluate(model):
     global global_step
 
-    steps_total = len(val_loader)
+    steps_total = len(test_loader)
     total_loss_sum = 0
     total_correct_images = 0
     total_input_images = 0
 
     with torch.no_grad():
-        val_begin = time.time()
+        test_begin = time.time()
 
-        for batch_index, (images, labels) in enumerate(val_loader):
+        for batch_index, (images, labels) in enumerate(test_loader):
             step_input_images = images.shape[0]
             total_input_images += step_input_images
 
@@ -181,14 +177,14 @@ def evaluate(model):
             total_loss_sum += step_loss * step_input_images
             step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
             total_correct_images += step_correct_images
-            writer.add_scalars('validate/loss', {'current': step_loss, 'average': total_loss_sum / total_input_images}, global_step)
-            writer.add_scalars('validate/accuracy', {'current': step_correct_images / step_input_images, 'average': total_correct_images / total_input_images}, global_step)
+            writer.add_scalars('test/loss', {'current': step_loss, 'average': total_loss_sum / total_input_images}, global_step)
+            writer.add_scalars('test/accuracy', {'current': step_correct_images / step_input_images, 'average': total_correct_images / total_input_images}, global_step)
 
             print('Evaluate  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(batch_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
 
-        val_end = time.time()
-        val_period = round((val_end - val_begin) * 1e3)
-        print('[Evaluate]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(int(val_period / 1e3), val_period % 1e3, total_loss_sum / total_input_images, total_correct_images, total_input_images, 1e2 * total_correct_images / total_input_images))
+        test_end = time.time()
+        test_period = round((test_end - test_begin) * 1e3)
+        print('[Evaluate]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(int(test_period / 1e3), test_period % 1e3, total_loss_sum / total_input_images, total_correct_images, total_input_images, 1e2 * total_correct_images / total_input_images))
 
 global_step = 0
 evaluate(model)
