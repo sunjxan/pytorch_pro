@@ -1,7 +1,11 @@
+__pycache__
 .idea
 data
-runs
+runs*
 *.pt
 *.pth
 *.pkl
-*.png
+*.pyc
+*.zip
+*.tar
+*.tar.gz

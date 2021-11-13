@@ -13,15 +13,18 @@ batch_size_train = 64
 batch_size_test = 1000
 learning_rate = 0.01
 momentum = 0.5
-dropout_rate = 0.5
 
 
 # 转换器，将PIL Image转换为Tensor
 transform = tv.transforms.Compose([tv.transforms.ToTensor()])
-# 训练集，(60000, 2, 1, 28, 28)
-train_set = tv.datasets.MNIST(root='./data', train=True, download=not os.path.isfile('./data/MNIST/processed/training.pt'), transform=transform)
-# 测试集，(10000, 2, 1, 28, 28)
-test_set = tv.datasets.MNIST(root='./data', train=False, download=not os.path.isfile('./data/MNIST/processed/test.pt'), transform=transform)
+if not os.path.isdir('./data/MNIST'):
+    # 训练集，(60000, 2, 1, 28, 28)
+    train_set = tv.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+    # 测试集，(10000, 2, 1, 28, 28)
+    test_set = tv.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+else:
+    train_set = tv.datasets.MNIST(root='./data', train=True, download=False, transform=transform)
+    test_set = tv.datasets.MNIST(root='./data', train=False, download=False, transform=transform)
 # 训练数据生成器
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size_train, shuffle=True)
 # 测试数据生成器
@@ -39,26 +42,27 @@ class Net(nn.Module):
         self._init_parameters()
 
     def forward(self, x):
-        # (64, 1, 28, 28)
+        # math.ceil((W - kernel_size + 1 + 2 * padding) / stride)
+        # (B, 1, 28, 28)
         x = self.conv1(x)
-        # (64, 10, 28, 28)
+        # (B, 10, 28, 28)
         x = F.relu(x)
         x = F.max_pool2d(x, 2)
-        # (64, 10, 14, 14)
+        # (B, 10, 14, 14)
         x = self.conv2(x)
-        # (64, 20, 14, 14)
+        # (B, 20, 14, 14)
         x = F.relu(x)
         x = F.max_pool2d(x, 2)
-        # (64, 20, 7, 7)
+        # (B, 20, 7, 7)
         x = self.bn(x)
         x = nn.Flatten()(x)
-        # (64, 980)
+        # (B, 980)
         x = self.fc1(x)
-        # (64, 50)
+        # (B, 50)
         x = F.relu(x)
-        x = F.dropout(x, p=dropout_rate, training=self.training)
+        x = F.dropout(x, p=0.5, training=self.training)
         x = self.fc2(x)
-        # (64, 10)
+        # (B, 10)
         return x
 
     def _init_parameters(self):
