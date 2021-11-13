@@ -35,6 +35,7 @@ class LeNet(nn.Module):
     def __init__(self):
         # 为提高精度，将AvgPool2d改为MaxPool2d，Sigmoid改为ReLU
         super().__init__()
+        # 卷积/池化后大小为 math.ceil((W - kernel_size + 1 + 2 * padding) / stride)
         self.features = nn.Sequential(
             # (B, 1, 28, 28)
             # 因为MNIST图片大小为28*28，不是32*32，所以修改padding为2
