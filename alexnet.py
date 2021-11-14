@@ -7,7 +7,7 @@ from tensorboardX import SummaryWriter
 import os, time
 
 
-epochs = 10
+epochs = 500
 batch_size_train = 64
 batch_size_val = 1000
 learning_rate = 0.01
@@ -70,6 +70,7 @@ class AlexNet(nn.Module):
             nn.Linear(in_features=4096, out_features=1000, bias=True)
             # (B, 1000)
         )
+        # https://download.pytorch.org/models/alexnet-owt-7be5be79.pth
         self.load_state_dict(torch.load("/home/sunjian/.cache/torch/hub/checkpoints/alexnet-owt-7be5be79.pth"))
     def forward(self, x):
         x = self.features(x)
