@@ -8,11 +8,11 @@ import os, time
 
 
 epochs = 200
-batch_size_train = 64
+batch_size_train = 100
 batch_size_val = 1000
 learning_rate = 0.01
 momentum = 0.5
-save_pkl_interval_steps = 500
+log_interval_steps = 250
 
 
 # 转换器，将PIL Image转换为Tensor
@@ -105,7 +105,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
 
 
-def fit(model, optimizer, epochs, initial_epoch=1):
+def fit(model, optimizer, epochs, initial_epoch=0):
     global global_step
 
     steps_per_epoch = len(train_loader)
@@ -116,7 +116,7 @@ def fit(model, optimizer, epochs, initial_epoch=1):
         epoch_correct_images = 0
         epoch_begin = time.time()
 
-        for batch_index, (images, labels) in enumerate(train_loader):
+        for step_index, (images, labels) in enumerate(train_loader):
             step_input_images = images.shape[0]
 
             step_begin = time.time()
@@ -133,26 +133,28 @@ def fit(model, optimizer, epochs, initial_epoch=1):
             step_end = time.time()
             step_period = round((step_end - step_begin) * 1e3)
 
-            if global_step and global_step % save_pkl_interval_steps == 0:
-                torch.save(model.state_dict(), 'alexnet-parameters.pkl')
-                torch.save(optimizer.state_dict(), 'alexnet-optimizer.pkl')
-
             global_step += 1
             step_loss = loss.item()
             epoch_loss_sum += step_loss * step_input_images
             step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
             epoch_correct_images += step_correct_images
-            writer.add_scalar('train/loss', step_loss, global_step)
-            writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)
+            
+            if step_index and step_index % log_interval_steps == 0:
+                torch.save(model.state_dict(), 'alexnet-parameters.pkl')
+                torch.save(optimizer.state_dict(), 'alexnet-optimizer.pkl')
 
-            print('Epoch {}/{}  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index, initial_epoch + epochs - 1, batch_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+                writer.add_scalar('train/loss', step_loss, global_step)
+                writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)
+
+                print('Epoch {}/{}  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
 
         epoch_end = time.time()
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
-        print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index, initial_epoch + epochs - 1, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
+        
+        print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
 
 global_step = 0
-fit(model, optimizer, epochs, 1)
+fit(model, optimizer, epochs, 0)
 
 
 def evaluate(model):
@@ -166,7 +168,7 @@ def evaluate(model):
     with torch.no_grad():
         val_begin = time.time()
 
-        for batch_index, (images, labels) in enumerate(val_loader):
+        for step_index, (images, labels) in enumerate(val_loader):
             step_input_images = images.shape[0]
             total_input_images += step_input_images
 
@@ -186,13 +188,16 @@ def evaluate(model):
             total_loss_sum += step_loss * step_input_images
             step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
             total_correct_images += step_correct_images
-            writer.add_scalars('validate/loss', {'current': step_loss, 'average': total_loss_sum / total_input_images}, global_step)
-            writer.add_scalars('validate/accuracy', {'current': step_correct_images / step_input_images, 'average': total_correct_images / total_input_images}, global_step)
+            
+            if step_index and step_index % log_interval_steps == 0:
+                writer.add_scalars('validate/loss', {'current': step_loss, 'average': total_loss_sum / total_input_images}, global_step)
+                writer.add_scalars('validate/accuracy', {'current': step_correct_images / step_input_images, 'average': total_correct_images / total_input_images}, global_step)
 
-            print('Evaluate  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(batch_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+                print('Evaluate  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
 
         val_end = time.time()
         val_period = round((val_end - val_begin) * 1e3)
+
         print('[Evaluate]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(int(val_period / 1e3), val_period % 1e3, total_loss_sum / total_input_images, total_correct_images, total_input_images, 1e2 * total_correct_images / total_input_images))
 
 global_step = 0
