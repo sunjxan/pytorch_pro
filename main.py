@@ -46,7 +46,7 @@ data_set = DataSet(data_set_size)
 train_set_size = round(data_set_size * train_ratio)
 test_set_size = data_set_size - train_set_size
 train_set, test_set = torch.utils.data.random_split(data_set, [train_set_size, test_set_size])
-# 训练数据生成器
+# 训练数据生成器，先随机打乱，然后按batch_size分批，样本不重不漏，最后一个batch样本数量可能不足batch_size
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size_train, shuffle=True)
 # 测试数据生成器
 test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size_test, shuffle=False)
