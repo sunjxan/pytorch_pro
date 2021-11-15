@@ -7,11 +7,12 @@ from tensorboardX import SummaryWriter
 import os, time
 
 
-epochs = 500
+epochs = 200
 batch_size_train = 64
 batch_size_val = 1000
 learning_rate = 0.01
 momentum = 0.5
+save_pkl_interval_steps = 500
 
 
 # 转换器，将PIL Image转换为Tensor
@@ -131,6 +132,10 @@ def fit(model, optimizer, epochs, initial_epoch=1):
 
             step_end = time.time()
             step_period = round((step_end - step_begin) * 1e3)
+
+            if global_step and global_step % save_pkl_interval_steps == 0:
+                torch.save(model.state_dict(), 'alexnet-parameters.pkl')
+                torch.save(optimizer.state_dict(), 'alexnet-optimizer.pkl')
 
             global_step += 1
             step_loss = loss.item()
