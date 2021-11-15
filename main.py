@@ -10,7 +10,7 @@ import random, time
 data_set_size = 10000
 train_ratio = .7
 epochs = 100
-batch_size_train = 64
+batch_size_train = 70
 batch_size_test = 1000
 learning_rate = 0.01
 
@@ -101,7 +101,7 @@ criterion = nn.MSELoss()
 optimizer = optim.SGD(model.parameters(), lr=learning_rate)
 
 
-def fit(model, optimizer, epochs, initial_epoch=1):
+def fit(model, optimizer, epochs, initial_epoch=0):
     global global_step
     
     steps_per_epoch = len(train_loader)
@@ -111,7 +111,7 @@ def fit(model, optimizer, epochs, initial_epoch=1):
         epoch_loss_sum = 0
         epoch_begin = time.time()
 
-        for batch_index, (features, labels) in enumerate(train_loader):
+        for step_index, (features, labels) in enumerate(train_loader):
             step_input_features = features.shape[0]
             
             step_begin = time.time()
@@ -133,14 +133,14 @@ def fit(model, optimizer, epochs, initial_epoch=1):
             epoch_loss_sum += step_loss * step_input_features
             writer.add_scalar('train/loss', step_loss, global_step)
 
-            print('Epoch {}/{}  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(epoch_index, initial_epoch + epochs - 1, batch_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss))
+            print('Epoch {}/{}  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(epoch_index + 1, initial_epoch + epochs, step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss))
 
         epoch_end = time.time()
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
-        print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(epoch_index, initial_epoch + epochs - 1, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_features))
+        print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_features))
 
 global_step = 0
-fit(model, optimizer, epochs, 1)
+fit(model, optimizer, epochs, 0)
 
 
 torch.save(model.state_dict(), 'parameters.pkl')
@@ -154,7 +154,7 @@ model2 = model2.to(device)
 optimizer2 = optim.SGD(model.parameters(), lr=learning_rate)
 optimizer2.load_state_dict(torch.load('optimizer.pkl'))
 
-fit(model, optimizer2, epochs, epochs + 1)
+fit(model, optimizer2, epochs, epochs)
 
 
 torch.save(model2, 'model.pkl')
@@ -175,7 +175,7 @@ def evaluate(model):
     with torch.no_grad():
         test_begin = time.time()
 
-        for batch_index, (features, labels) in enumerate(test_loader):
+        for step_index, (features, labels) in enumerate(test_loader):
             step_input_features = features.shape[0]
             total_input_features += step_input_features
             
@@ -195,7 +195,7 @@ def evaluate(model):
             total_loss_sum += step_loss * step_input_features
             writer.add_scalars('test/loss', {'current': step_loss, 'average': total_loss_sum / total_input_features}, global_step)
 
-            print('Test  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(batch_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss))
+            print('Test  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss))
         
         test_end = time.time()
         test_period = round((test_end - test_begin) * 1e3)
