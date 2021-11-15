@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 
@@ -65,7 +64,7 @@ class Net(nn.Module):
         x = self.bn(x)
         x = self.fc1(x)
         # (B, 10)
-        x = F.dropout(x, p=0.1, training=self.training)
+        x = torch.dropout(x, p=0.1, training=self.training)
         x = self.fc2(x)
         # (B, 3)
         return x
