@@ -71,7 +71,7 @@ class AlexNet(nn.Module):
             nn.Linear(in_features=4096, out_features=1000, bias=True)
             # (B, 1000)
         )
-        # https://download.pytorch.org/models/alexnet-owt-7be5be79.pth
+        # PyTorch版本不同预训练权重地址可能不同  https://download.pytorch.org/models/alexnet-owt-7be5be79.pth
         self.load_state_dict(torch.load("/home/sunjian/.cache/torch/hub/checkpoints/alexnet-owt-7be5be79.pth"))
     def forward(self, x):
         x = self.features(x)
