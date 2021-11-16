@@ -17,6 +17,9 @@ class RNNCell(nn.Module):
         self.fc_hh = nn.Linear(hidden_size, hidden_size, bias=bias)
         self._init_parameters()
 
+    # input: (batch, input_size)
+    # hx: (batch, hidden_size)
+    # output: (batch, hidden_size)
     def forward(self, input, hx=None):
         output = self.fc_ih(input)
         if hx is not None:
@@ -37,6 +40,9 @@ class RNNSection(nn.Module):
         super().__init__()
         self.cell = RNNCell(input_size, hidden_size, bias, tanh)
 
+    # inputs: (seq, batch, input_size)
+    # hx: (batch, hidden_size)
+    # outputs: (seq, batch, hidden_size)
     def forward(self, inputs, hx=None):
         outputs = []
         for input in inputs:
@@ -55,6 +61,10 @@ class RNN(nn.Module):
             else:
                 self.layers.append(RNNSection(hidden_size, hidden_size, bias, tanh))
 
+    # inputs: (seq, batch, input_size)
+    # hxs: (num_layers, batch, hidden_size)
+    # outputs: (seq, batch, hidden_size)
+    # output_hxs: (num_layers, batch, hidden_size)
     def forward(self, inputs, hxs=None):
         if hxs is None:
             hxs = [None] * self.num_layers
