@@ -1,97 +1,169 @@
 import torch
+import torchvision as tv
 import torch.nn as nn
+import torch.optim as optim
+from tensorboardX import SummaryWriter
 
-import math
-
-from collections import OrderedDict
+import os, time
 
 
-class RNNCell(nn.Module):
-    def __init__(self, input_size, hidden_size, bias=True, tanh=True):
+epochs = 10
+batch_size_train = 60
+batch_size_test = 1000
+learning_rate = 0.01
+momentum = 0.5
+log_interval_steps = 200
+
+
+# 转换器，将PIL Image转换为Tensor
+transform = tv.transforms.Compose([tv.transforms.ToTensor(), torch.squeeze])
+if not os.path.isdir('./data/MNIST'):
+    # 训练集，(60000, 2, 1, 28, 28)
+    train_set = tv.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+    # 测试集，(10000, 2, 1, 28, 28)
+    test_set = tv.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+else:
+    train_set = tv.datasets.MNIST(root='./data', train=True, download=False, transform=transform)
+    test_set = tv.datasets.MNIST(root='./data', train=False, download=False, transform=transform)
+# 训练数据生成器
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size_train, shuffle=True)
+# 测试数据生成器
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size_test, shuffle=False)
+
+
+class Net(nn.Module):
+    def __init__(self):
         super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.bias = bias
-        self.tanh = tanh
-        self.fc_ih = nn.Linear(input_size, hidden_size, bias=bias)
-        self.fc_hh = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self._init_parameters()
-
-    # input: (batch, input_size)
-    # hx: (batch, hidden_size)
-    # output: (batch, hidden_size)
-    def forward(self, input, hx=None):
-        output = self.fc_ih(input)
-        if hx is not None:
-            output += self.fc_hh(hx)
-        output = torch.tanh(output) if self.tanh else torch.relu(output)
-        return output
-
-    def _init_parameters(self):
-        k = math.sqrt(1 / self.hidden_size)
-        nn.init.uniform_(self.fc_ih.weight, -k, k)
-        nn.init.uniform_(self.fc_hh.weight, -k, k)
-        if self.bias:
-            nn.init.uniform_(self.fc_ih.bias, -k, k)
-            nn.init.uniform_(self.fc_hh.bias, -k, k)
-
-class RNNSection(nn.Module):
-    def __init__(self, input_size, hidden_size, bias=True, tanh=True):
-        super().__init__()
-        self.cell = RNNCell(input_size, hidden_size, bias, tanh)
-
-    # inputs: (seq, batch, input_size)
-    # hx: (batch, hidden_size)
-    # outputs: (seq, batch, hidden_size)
-    def forward(self, inputs, hx=None):
-        outputs = []
-        for input in inputs:
-            hx = self.cell(input, hx)
-            outputs.append(hx)
-        return torch.stack(outputs), hx
-        
-class RNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers=1, bias=True, tanh=True):
-        super().__init__()
-        self.num_layers = num_layers
-        self.layers = []
-        for i in range(num_layers):
-            if i == 0:
-                self.layers.append(RNNSection(input_size, hidden_size, bias, tanh))
-            else:
-                self.layers.append(RNNSection(hidden_size, hidden_size, bias, tanh))
-
-    # inputs: (seq, batch, input_size)
-    # hxs: (num_layers, batch, hidden_size)
-    # outputs: (seq, batch, hidden_size)
-    # output_hxs: (num_layers, batch, hidden_size)
-    def forward(self, inputs, hxs=None):
-        if hxs is None:
-            hxs = [None] * self.num_layers
-        output_hxs = []
-        for i in range(self.num_layers):
-            inputs, output_hx = self.layers[i](inputs, hxs[i])
-            output_hxs.append(output_hx)
-        return inputs, torch.stack(output_hxs)
+        # 将batch维度放到最顶层
+        self.rnn = nn.RNN(28, 28, 1, batch_first=True)
+        self.fc = nn.Linear(in_features=28, out_features=10, bias=True)
+    def forward(self, x):
+        outputs, hxs = self.rnn(x)
+        # 取输出的向量outputs中的最后一个向量最为最终输出
+        x = outputs[:, -1, :]
+        x = self.fc(x)
+        return x
 
 
-input = torch.randn(5, 2, 3)
-h0 = torch.randn(2, 2, 4)
+# 可视化 tensorboard --logdir=runs --bind_all
+writer = SummaryWriter(logdir='runs-rnn')
+# 设备
+# 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 mnist.py
+cuda_available = torch.cuda.is_available()
+if cuda_available:
+    device_count = torch.cuda.device_count()
+    print('use {} gpu(s)'.format(device_count))
+else:
+    print('use cpu')
+# 程序中会对可见GPU重新从0编号
+device = torch.device("cuda:0" if cuda_available else "cpu")
+# 模型
+model = Net()
+writer.add_graph(model, (torch.zeros(1, 28, 28), ))
+if cuda_available and device_count > 1:
+    model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
+model = model.to(device)
+# 损失函数
+criterion = nn.CrossEntropyLoss()
+# 优化器
+optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
 
-rnn = RNN(3, 4, 2)
-L = [list(cell.parameters()) for cell in rnn.layers]
-size = len(L)
-D = []
-for i in range(size):
-    D.append(['weight_ih_l' + str(i), L[i][0]])
-    D.append(['weight_hh_l' + str(i), L[i][2]])
-    D.append(['bias_ih_l' + str(i), L[i][1]])
-    D.append(['bias_hh_l' + str(i), L[i][3]])
-D = OrderedDict(D)
 
-rnn2 = nn.RNN(3, 4, 2)
-rnn2.load_state_dict(D)
+def fit(model, optimizer, epochs, initial_epoch=0):
+    global global_step
 
-output, hn = rnn(input, h0)
-output2, hn2 = rnn2(input, h0)
-print(torch.all(output == output2), torch.all(hn == hn2))
+    steps_per_epoch = len(train_loader)
+    total_train_images = len(train_set)
+
+    for epoch_index in range(initial_epoch, initial_epoch + epochs):
+        epoch_loss_sum = 0
+        epoch_correct_images = 0
+        epoch_begin = time.time()
+
+        for step_index, (images, labels) in enumerate(train_loader):
+            step_input_images = images.shape[0]
+
+            step_begin = time.time()
+
+            images = images.to(device)
+            labels = labels.to(device)
+
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            step_end = time.time()
+            step_period = round((step_end - step_begin) * 1e3)
+
+            global_step += 1
+            step_loss = loss.item()
+            epoch_loss_sum += step_loss * step_input_images
+            step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
+            epoch_correct_images += step_correct_images
+            
+            if step_index and step_index % log_interval_steps == 0:
+                torch.save(model.state_dict(), 'lenet-parameters.pkl')
+                torch.save(optimizer.state_dict(), 'lenet-optimizer.pkl')
+
+                writer.add_scalar('train/loss', step_loss, global_step)
+                writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)
+
+                print('Epoch {}/{}  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+
+        epoch_end = time.time()
+        epoch_period = round((epoch_end - epoch_begin) * 1e3)
+
+        print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
+
+global_step = 0
+fit(model, optimizer, epochs, 0)
+
+
+def evaluate(model):
+    global global_step
+
+    steps_total = len(test_loader)
+    total_loss_sum = 0
+    total_correct_images = 0
+    total_input_images = 0
+
+    with torch.no_grad():
+        test_begin = time.time()
+
+        for step_index, (images, labels) in enumerate(test_loader):
+            step_input_images = images.shape[0]
+            total_input_images += step_input_images
+
+            step_begin = time.time()
+
+            images = images.to(device)
+            labels = labels.to(device)
+
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+
+            step_end = time.time()
+            step_period = round((step_end - step_begin) * 1e3)
+
+            global_step += 1
+            step_loss = loss.item()
+            total_loss_sum += step_loss * step_input_images
+            step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
+            total_correct_images += step_correct_images
+
+            writer.add_scalars('test/loss', {'current': step_loss, 'average': total_loss_sum / total_input_images}, global_step)
+            writer.add_scalars('test/accuracy', {'current': step_correct_images / step_input_images, 'average': total_correct_images / total_input_images}, global_step)
+
+            print('Evaluate  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+
+        test_end = time.time()
+        test_period = round((test_end - test_begin) * 1e3)
+
+        print('[Evaluate]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(int(test_period / 1e3), test_period % 1e3, total_loss_sum / total_input_images, total_correct_images, total_input_images, 1e2 * total_correct_images / total_input_images))
+
+global_step = 0
+evaluate(model)
+
+writer.close()
