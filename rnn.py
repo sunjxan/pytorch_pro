@@ -72,7 +72,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
 
 
-def fit(model, optimizer, epochs, initial_epoch=0):
+def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
     global global_step
 
     steps_per_epoch = len(train_loader)
@@ -120,10 +120,13 @@ def fit(model, optimizer, epochs, initial_epoch=0):
 
         print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
     
-    steps_total_test = len(test_loader)
-    for i in range(1, steps_total_test + 1):
-        writer.add_scalars('test/loss', {'baseline': epoch_loss_sum / total_train_images}, i)
-        writer.add_scalars('test/accuracy', {'baseline': epoch_correct_images / total_train_images}, i)
+    if baseline:
+        steps_total_test = len(test_loader)
+        baseline_loss = epoch_loss_sum / total_train_images
+        baseline_accuracy = epoch_correct_images / total_train_images
+        for i in range(1, steps_total_test + 1):
+            writer.add_scalars('test/loss', {'baseline': baseline_loss}, i)
+            writer.add_scalars('test/accuracy', {'baseline': baseline_accuracy}, i)
             
 global_step = 0
 fit(model, optimizer, epochs, 0)
