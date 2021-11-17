@@ -135,7 +135,7 @@ def fit(model, optimizer, epochs, initial_epoch=0):
             step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
             epoch_correct_images += step_correct_images
             
-            if step_index and step_index % log_interval_steps == 0:
+            if (step_index + 1) % log_interval_steps == 0:
                 torch.save(model.state_dict(), 'lenet-parameters.pkl')
                 torch.save(optimizer.state_dict(), 'lenet-optimizer.pkl')
 
