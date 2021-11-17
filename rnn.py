@@ -119,7 +119,12 @@ def fit(model, optimizer, epochs, initial_epoch=0):
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
 
         print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
-
+    
+    steps_total_test = len(test_loader)
+    for i in range(1, steps_total_test + 1):
+        writer.add_scalars('test/loss', {'baseline': epoch_loss_sum / total_train_images}, i)
+        writer.add_scalars('test/accuracy', {'baseline': epoch_correct_images / total_train_images}, i)
+            
 global_step = 0
 fit(model, optimizer, epochs, 0)
 
