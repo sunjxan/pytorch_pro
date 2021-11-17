@@ -64,7 +64,7 @@ class Net(nn.Module):
         x = self.bn(x)
         x = self.fc1(x)
         # (B, 10)
-        x = torch.dropout(x, p=0.1, training=self.training)
+        x = torch.dropout(x, p=0.1, train=self.training)
         x = self.fc2(x)
         # (B, 3)
         return x
@@ -100,26 +100,26 @@ criterion = nn.MSELoss()
 optimizer = optim.SGD(model.parameters(), lr=learning_rate)
 
 
-def fit(model, optimizer, epochs, initial_epoch=0):
+def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
     global global_step
     
     steps_per_epoch = len(train_loader)
-    total_train_features = len(train_set)
+    total_train_samples = len(train_set)
 
     for epoch_index in range(initial_epoch, initial_epoch + epochs):
         epoch_loss_sum = 0
         epoch_begin = time.time()
 
-        for step_index, (features, labels) in enumerate(train_loader):
-            step_input_features = features.shape[0]
+        for step_index, (samples, labels) in enumerate(train_loader):
+            step_input_samples = samples.shape[0]
             
             step_begin = time.time()
 
-            features = features.to(device)
+            samples = samples.to(device)
             labels = labels.to(device)
 
             optimizer.zero_grad()
-            outputs = model(features)
+            outputs = model(samples)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -129,17 +129,23 @@ def fit(model, optimizer, epochs, initial_epoch=0):
 
             global_step += 1
             step_loss = loss.item()
-            epoch_loss_sum += step_loss * step_input_features
+            epoch_loss_sum += step_loss * step_input_samples
             writer.add_scalar('train/loss', step_loss, global_step)
 
             print('Epoch {}/{}  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(epoch_index + 1, initial_epoch + epochs, step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss))
 
         epoch_end = time.time()
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
-        print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_features))
+        print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_samples))
+
+    if baseline:
+        steps_total_test = len(test_loader)
+        baseline_value = epoch_loss_sum / total_train_samples
+        for i in range(1, steps_total_test + 1):
+            writer.add_scalars('test/loss', {'baseline': baseline_value}, i)
 
 global_step = 0
-fit(model, optimizer, epochs, 0)
+fit(model, optimizer, epochs, 0, False)
 
 
 torch.save(model.state_dict(), 'parameters.pkl')
@@ -169,21 +175,21 @@ def evaluate(model):
     
     steps_total = len(test_loader)
     total_loss_sum = 0
-    total_input_features = 0
+    total_input_samples = 0
 
     with torch.no_grad():
         test_begin = time.time()
 
-        for step_index, (features, labels) in enumerate(test_loader):
-            step_input_features = features.shape[0]
-            total_input_features += step_input_features
+        for step_index, (samples, labels) in enumerate(test_loader):
+            step_input_samples = samples.shape[0]
+            total_input_samples += step_input_samples
             
             step_begin = time.time()
 
-            features = features.to(device)
+            samples = samples.to(device)
             labels = labels.to(device)
 
-            outputs = model(features)
+            outputs = model(samples)
             loss = criterion(outputs, labels)
 
             step_end = time.time()
@@ -191,14 +197,14 @@ def evaluate(model):
 
             global_step += 1
             step_loss = loss.item()
-            total_loss_sum += step_loss * step_input_features
-            writer.add_scalars('test/loss', {'current': step_loss, 'average': total_loss_sum / total_input_features}, global_step)
+            total_loss_sum += step_loss * step_input_samples
+            writer.add_scalars('test/loss', {'current': step_loss, 'average': total_loss_sum / total_input_samples}, global_step)
 
             print('Test  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss))
         
         test_end = time.time()
         test_period = round((test_end - test_begin) * 1e3)
-        print('[Test]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(int(test_period / 1e3), test_period % 1e3, total_loss_sum / total_input_features))
+        print('[Test]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(int(test_period / 1e3), test_period % 1e3, total_loss_sum / total_input_samples))
 
 global_step = 0
 evaluate(model3)
