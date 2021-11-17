@@ -210,4 +210,5 @@ def evaluate(model):
 global_step = 0
 evaluate(model)
 
+torch.save(model, 'alexnet.pkl')
 writer.close()
