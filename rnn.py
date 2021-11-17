@@ -8,8 +8,8 @@ import os, time
 
 
 num_layers = 2
-input_size = 64
-hidden_size = 28
+input_size = 28
+hidden_size = 64
 epochs = 100
 batch_size_train = 60
 batch_size_test = 1000
