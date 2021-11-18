@@ -18,7 +18,7 @@ momentum = 0.5
 log_interval_steps = 200
 
 
-# 转换器，将PIL Image转换为Tensor，提供MNIST数据集单通道数据的平均值和标准差，将其转换为标准正态分布
+# 转换器，将PIL Image转换为Tensor，提供MNIST数据集单通道数据的平均值和标准差，将其转换为标准正态分布，并去除多余的维度
 transform = tv.transforms.Compose([tv.transforms.ToTensor(), tv.transforms.Normalize((0.1307,), (0.3081,)), torch.squeeze])
 if not os.path.isdir('./data/MNIST'):
     # 训练集，(60000, 2, 1, 28, 28)
