@@ -95,7 +95,7 @@ else:
 device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
 model = AlexNet()
-writer.add_graph(model, (torch.zeros(1, 3, 64, 64), ))
+writer.add_graph(model, torch.zeros(1, 3, 64, 64))
 if cuda_available and device_count > 1:
     model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
 model = model.to(device)
