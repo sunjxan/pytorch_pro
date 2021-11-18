@@ -25,7 +25,7 @@ train_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/train', trans
 val_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/val', transform=transform)
 # 测试集（无标签），(10000, 2, 3, 64, 64)
 test_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/test', transform=transform)
-# 训练数据生成器
+# 训练数据生成器，先随机打乱，然后按batch_size分批，样本不重不漏，最后一个batch样本数量可能不足batch_size
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size_train, shuffle=True)
 # 测试数据生成器
 val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size_val, shuffle=False)
