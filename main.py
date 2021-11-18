@@ -12,6 +12,8 @@ epochs = 100
 batch_size_train = 70
 batch_size_test = 1000
 learning_rate = 0.01
+# 对于可重复的实验，设置随机种子
+torch.manual_seed(seed=1)
 
 
 # x = 1a + 2b + 3c + 4d + 5e
