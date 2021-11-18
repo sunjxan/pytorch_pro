@@ -16,6 +16,8 @@ batch_size_test = 1000
 learning_rate = 0.01
 momentum = 0.5
 log_interval_steps = 200
+# 对于可重复的实验，设置随机种子
+torch.manual_seed(seed=1)
 
 
 # 转换器，将PIL Image转换为Tensor，提供MNIST数据集单通道数据的平均值和标准差，将其转换为标准正态分布，并去除多余的维度
