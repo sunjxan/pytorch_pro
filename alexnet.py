@@ -15,8 +15,8 @@ momentum = 0.5
 log_interval_steps = 250
 
 
-# 转换器，将PIL Image转换为Tensor
-transform = tv.transforms.Compose([tv.transforms.ToTensor()])
+# 转换器，将PIL Image转换为Tensor，提供MNIST数据集单通道数据的平均值和标准差，将其转换为标准正态分布
+transform = tv.transforms.Compose([tv.transforms.ToTensor(), tv.transforms.Normalize((0.1307,), (0.3081,))])
 # 训练集（有标签），(100000, 2, 3, 64, 64)
 train_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/train', transform=transform)
 # 验证集（有标签），(10000, 2, 3, 64, 64)
@@ -33,43 +33,29 @@ class AlexNet(nn.Module):
     def __init__(self):
         super().__init__()
         self.features = nn.Sequential(
-            # (B, 3, W, H)
             nn.Conv2d(3, 64, kernel_size=(11, 11), stride=(4, 4), padding=(2, 2)),
-            # (B, 64, W1=math.ceil((W - 6) / 4), H1=math.ceil((H - 6) / 4))
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=0, dilation=1, ceil_mode=False),
-            # (B, 64, W2=math.ceil(W1 / 2 - 1), H2=math.ceil(H1 / 2 - 1))
             nn.Conv2d(64, 192, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)),
-            # (B, 192, W2, H2)
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=0, dilation=1, ceil_mode=False),
-            # (B, 192, W3=math.ceil(W2 / 2 - 1), H3=math.ceil(H2 / 2 - 1))
             nn.Conv2d(192, 384, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            # (B, 384, W3, H3)
             nn.ReLU(inplace=True),
             nn.Conv2d(384, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            # (B, 256, W3, H3)
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            # (B, 256, W3, H3)
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=0, dilation=1, ceil_mode=False)
-            # (B, 256, W4=math.ceil(W3 / 2 - 1), H4=math.ceil(H3 / 2 - 1))
         )
         self.avgpool = nn.AdaptiveAvgPool2d(output_size=(6, 6))
-        # (B, 256, 6, 6)
         self.classifier = nn.Sequential(
-            # (B, 9216)
             nn.Dropout(p=0.5, inplace=False),
             nn.Linear(in_features=9216, out_features=4096, bias=True),
-            # (B, 4096)
             nn.ReLU(inplace=True),
             nn.Dropout(p=0.5, inplace=False),
             nn.Linear(in_features=4096, out_features=4096, bias=True),
-            # (B, 4096)
             nn.ReLU(inplace=True),
             nn.Linear(in_features=4096, out_features=1000, bias=True)
-            # (B, 1000)
         )
         # PyTorch版本不同预训练权重地址可能不同  https://download.pytorch.org/models/alexnet-owt-7be5be79.pth
         self.load_state_dict(torch.load("/home/sunjian/.cache/torch/hub/checkpoints/alexnet-owt-7be5be79.pth"))
