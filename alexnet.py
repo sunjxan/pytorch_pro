@@ -17,8 +17,8 @@ log_interval_steps = 250
 torch.manual_seed(seed=1)
 
 
-# 转换器，将PIL Image转换为Tensor，提供MNIST数据集单通道数据的平均值和标准差，将其转换为标准正态分布
-transform = tv.transforms.Compose([tv.transforms.ToTensor(), tv.transforms.Normalize((0.1307,), (0.3081,))])
+# 转换器，将PIL Image转换为Tensor
+transform = tv.transforms.Compose([tv.transforms.ToTensor()])
 # 训练集（有标签），(100000, 2, 3, 64, 64)
 train_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/train', transform=transform)
 # 验证集（有标签），(10000, 2, 3, 64, 64)
