@@ -3,9 +3,12 @@ import torch.nn as nn
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 
-import random, time
+import os, random, time
 
 
+model_pkl = 'main.pkl'
+parameters_pkl = 'main-parameters.pkl'
+optimizer_pkl = 'main-optimizer.pkl'
 data_set_size = 10000
 train_ratio = .7
 epochs = 100
@@ -59,6 +62,7 @@ class Net(nn.Module):
         self.bn = nn.BatchNorm1d(5)
         self.fc1 = nn.Linear(in_features=5, out_features=10)
         self.fc2 = nn.Linear(in_features=10, out_features=3)
+        self.dropout = nn.Dropout(p=0.1)
         self._init_parameters()
 
     def forward(self, x):
@@ -66,7 +70,7 @@ class Net(nn.Module):
         x = self.bn(x)
         x = self.fc1(x)
         # (B, 10)
-        x = torch.dropout(x, p=0.1, train=self.training)
+        x = self.dropout(x)
         x = self.fc2(x)
         # (B, 3)
         return x
@@ -81,7 +85,7 @@ class Net(nn.Module):
 # 可视化 tensorboard --logdir=runs --bind_all
 writer = SummaryWriter()
 # 设备
-# 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 mnist.py
+# 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 filename.py
 cuda_available = torch.cuda.is_available()
 if cuda_available:
     device_count = torch.cuda.device_count()
@@ -92,7 +96,8 @@ else:
 device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
 model = Net()
-writer.add_graph(model, torch.zeros(1, 5))
+if os.path.isfile(parameters_pkl):
+    model.load_state_dict(torch.load(parameters_pkl))
 if cuda_available and device_count > 1:
     model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
 model = model.to(device)
@@ -100,15 +105,23 @@ model = model.to(device)
 criterion = nn.MSELoss()
 # 优化器
 optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+if os.path.isfile(optimizer_pkl):
+    optimizer.load_state_dict(torch.load(optimizer_pkl))
 
 
 def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
     global global_step
-    
+
+    # 设置model.training为True，使模型中的Dropout和BatchNorm起作用
+    model.train()
+
     steps_per_epoch = len(train_loader)
     total_train_samples = len(train_set)
 
     for epoch_index in range(initial_epoch, initial_epoch + epochs):
+        print('Train Epoch {}/{}'.format(epoch_index + 1, initial_epoch + epochs))
+        print('-' * 20)
+
         epoch_loss_sum = 0
         epoch_begin = time.time()
 
@@ -132,13 +145,19 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
             global_step += 1
             step_loss = loss.item()
             epoch_loss_sum += step_loss * step_input_samples
+
+            torch.save(model.state_dict(), parameters_pkl)
+            torch.save(optimizer.state_dict(), optimizer_pkl)
             writer.add_scalar('train/loss', step_loss, global_step)
 
-            print('Epoch {}/{}  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(epoch_index + 1, initial_epoch + epochs, step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss))
+            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss))
 
         epoch_end = time.time()
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
-        print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_samples))
+
+        print('-' * 20)
+        print('Train Epoch {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_samples))
+        print()
 
     if baseline:
         steps_total_test = len(test_loader)
@@ -147,39 +166,23 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
             writer.add_scalars('test/loss', {'baseline': baseline_value}, i)
 
 global_step = 0
-fit(model, optimizer, epochs, 0, False)
-
-
-torch.save(model.state_dict(), 'parameters.pkl')
-torch.save(optimizer.state_dict(), 'optimizer.pkl')
-
-model2 = Net()
-if cuda_available and device_count > 1:
-    model2 = nn.DataParallel(model2, device_ids=list(range(device_count)), output_device=0)
-model2.load_state_dict(torch.load('parameters.pkl'))
-model2 = model2.to(device)
-optimizer2 = optim.SGD(model.parameters(), lr=learning_rate)
-optimizer2.load_state_dict(torch.load('optimizer.pkl'))
-
-fit(model, optimizer2, epochs, epochs)
-
-
-torch.save(model2, 'model.pkl')
-
-model3 = torch.load('model.pkl')
-if cuda_available and device_count > 1:
-    model3 = nn.DataParallel(model3, device_ids=list(range(device_count)), output_device=0)
-model3 = model3.to(device)
+fit(model, optimizer, epochs, 0)
 
 
 def evaluate(model):
     global global_step
-    
+
+    # 设置model.training为False，使模型中的Dropout和BatchNorm不起作用
+    model.eval()
+
     steps_total = len(test_loader)
     total_loss_sum = 0
     total_input_samples = 0
 
     with torch.no_grad():
+        print('Eval')
+        print('-' * 20)
+
         test_begin = time.time()
 
         for step_index, (samples, labels) in enumerate(test_loader):
@@ -202,13 +205,19 @@ def evaluate(model):
             total_loss_sum += step_loss * step_input_samples
             writer.add_scalars('test/loss', {'current': step_loss, 'average': total_loss_sum / total_input_samples}, global_step)
 
-            print('Test  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss))
+            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss))
         
         test_end = time.time()
         test_period = round((test_end - test_begin) * 1e3)
-        print('[Test]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(int(test_period / 1e3), test_period % 1e3, total_loss_sum / total_input_samples))
+
+        print('-' * 20)
+        print('Eval  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}'.format(int(test_period / 1e3), test_period % 1e3, total_loss_sum / total_input_samples))
+        print()
 
 global_step = 0
-evaluate(model3)
+evaluate(model)
 
+
+torch.save(model, model_pkl)
+writer.add_graph(model, torch.zeros(1, 5).to(device))
 writer.close()

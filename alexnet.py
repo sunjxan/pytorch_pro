@@ -7,6 +7,9 @@ from tensorboardX import SummaryWriter
 import os, time
 
 
+model_pkl = 'alexnet.pkl'
+parameters_pkl = 'alexnet-parameters.pkl'
+optimizer_pkl = 'alexnet-optimizer.pkl'
 epochs = 200
 batch_size_train = 100
 batch_size_val = 1000
@@ -69,10 +72,10 @@ class AlexNet(nn.Module):
         return x
 
 
-# 可视化 tensorboard --logdir=runs --bind_all
+# 可视化 tensorboard --logdir=runs-alexnet --bind_all
 writer = SummaryWriter(logdir='runs-alexnet')
 # 设备
-# 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 mnist.py
+# 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 filename.py
 cuda_available = torch.cuda.is_available()
 if cuda_available:
     device_count = torch.cuda.device_count()
@@ -83,7 +86,8 @@ else:
 device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
 model = AlexNet()
-writer.add_graph(model, torch.zeros(1, 3, 64, 64))
+if os.path.isfile(parameters_pkl):
+    model.load_state_dict(torch.load(parameters_pkl))
 if cuda_available and device_count > 1:
     model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
 model = model.to(device)
@@ -91,15 +95,23 @@ model = model.to(device)
 criterion = nn.CrossEntropyLoss()
 # 优化器
 optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+if os.path.isfile(optimizer_pkl):
+    optimizer.load_state_dict(torch.load(optimizer_pkl))
 
 
 def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
     global global_step
 
+    # 设置model.training为True，使模型中的Dropout和BatchNorm起作用
+    model.train()
+
     steps_per_epoch = len(train_loader)
     total_train_images = len(train_set)
 
     for epoch_index in range(initial_epoch, initial_epoch + epochs):
+        print('Train Epoch {}/{}'.format(epoch_index + 1, initial_epoch + epochs))
+        print('-' * 20)
+
         epoch_loss_sum = 0
         epoch_correct_images = 0
         epoch_begin = time.time()
@@ -134,18 +146,20 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
                 writer.add_scalar('train/loss', step_loss, global_step)
                 writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)
 
-                print('Epoch {}/{}  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+                print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
 
         epoch_end = time.time()
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
-        
-        print('[Epoch {}/{}]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
+
+        print('-' * 20)
+        print('Train Epoch {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
+        print()
 
     if baseline:
-        steps_total_test = len(test_loader)
+        steps_total_val = len(val_loader)
         baseline_loss = epoch_loss_sum / total_train_images
         baseline_accuracy = epoch_correct_images / total_train_images
-        for i in range(1, steps_total_test + 1):
+        for i in range(1, steps_total_val + 1):
             writer.add_scalars('test/loss', {'baseline': baseline_loss}, i)
             writer.add_scalars('test/accuracy', {'baseline': baseline_accuracy}, i)
 
@@ -156,12 +170,18 @@ fit(model, optimizer, epochs, 0)
 def evaluate(model):
     global global_step
 
+    # 设置model.training为False，使模型中的Dropout和BatchNorm不起作用
+    model.eval()
+
     steps_total = len(val_loader)
     total_loss_sum = 0
     total_correct_images = 0
     total_input_images = 0
 
     with torch.no_grad():
+        print('Eval')
+        print('-' * 20)
+
         val_begin = time.time()
 
         for step_index, (images, labels) in enumerate(val_loader):
@@ -188,15 +208,19 @@ def evaluate(model):
             writer.add_scalars('validate/loss', {'current': step_loss, 'average': total_loss_sum / total_input_images}, global_step)
             writer.add_scalars('validate/accuracy', {'current': step_correct_images / step_input_images, 'average': total_correct_images / total_input_images}, global_step)
 
-            print('Evaluate  Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
 
         val_end = time.time()
         val_period = round((val_end - val_begin) * 1e3)
 
-        print('[Evaluate]  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(int(val_period / 1e3), val_period % 1e3, total_loss_sum / total_input_images, total_correct_images, total_input_images, 1e2 * total_correct_images / total_input_images))
+        print('-' * 20)
+        print('Eval  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(int(val_period / 1e3), val_period % 1e3, total_loss_sum / total_input_images, total_correct_images, total_input_images, 1e2 * total_correct_images / total_input_images))
+        print()
 
 global_step = 0
 evaluate(model)
 
-torch.save(model, 'alexnet.pkl')
+
+torch.save(model, model_pkl)
+writer.add_graph(model, torch.zeros(1, 3, 64, 64).to(device))
 writer.close()

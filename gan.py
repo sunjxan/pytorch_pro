@@ -7,7 +7,11 @@ from tensorboardX import SummaryWriter
 import os, time
 
 
-epochs = 10
+model_pkl = 'gan.pkl'
+parameters_pkl = 'gan-parameters.pkl'
+optimizer_G_pkl = 'gan-optimizer-G.pkl'
+optimizer_D_pkl = 'gan-optimizer-D.pkl'
+epochs = 200
 batch_size_train = 100
 batch_size_test = 1000
 learning_rate = 0.01
@@ -68,20 +72,16 @@ class Discriminator(nn.Module):
 class GAN(nn.Module):
     def __init__(self):
         super().__init__()
-        self.G = Generator().to(device)
-        self.D = Discriminator().to(device)
-        self.G_criterion = nn.BCELoss()
-        self.G_optimizer = optim.SGD(self.G.parameters(), lr=learning_rate, momentum=momentum)
-        self.D_criterion = nn.BCELoss()
-        self.D_optimizer = optim.SGD(self.D.parameters(), lr=learning_rate, momentum=momentum)
+        self.G = Generator()
+        self.D = Discriminator()
     def forward(self, input):
         return self.G(input)
 
 
-# 可视化 tensorboard --logdir=runs --bind_all
-writer = SummaryWriter(logdir='runs-alexnet')
+# 可视化 tensorboard --logdir=runs-gan --bind_all
+writer = SummaryWriter(logdir='runs-gan')
 # 设备
-# 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 mnist.py
+# 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 filename.py
 cuda_available = torch.cuda.is_available()
 if cuda_available:
     device_count = torch.cuda.device_count()
@@ -92,81 +92,203 @@ else:
 device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
 gan = GAN()
-
+if os.path.isfile(parameters_pkl):
+    gan.load_state_dict(torch.load(parameters_pkl))
+if cuda_available and device_count > 1:
+    gan = nn.DataParallel(gan, device_ids=list(range(device_count)), output_device=0)
+gan = gan.to(device)
+# 损失函数
+criterion_G = nn.BCELoss()
+criterion_D = nn.BCELoss()
+# 优化器
+optimizer_G = optim.SGD(gan.G.parameters(), lr=learning_rate, momentum=momentum)        
+optimizer_D = optim.SGD(gan.D.parameters(), lr=learning_rate, momentum=momentum)
+if os.path.isfile(optimizer_G_pkl):
+    optimizer_G.load_state_dict(torch.load(optimizer_G_pkl))
+if os.path.isfile(optimizer_D_pkl):
+    optimizer_D.load_state_dict(torch.load(optimizer_D_pkl))
 
 def get_noises(*shape):
     return torch.rand(shape)
 
 def fit(gan, epochs, initial_epoch=0):
+    global global_step
+
+    # 设置model.training为True，使模型中的Dropout和BatchNorm起作用
+    gan.train()
+
+    steps_per_epoch = len(train_loader)
+    total_train_images = len(train_set)
 
     for epoch_index in range(initial_epoch, initial_epoch + epochs):
-    
-        for step_index, (images, labels) in enumerate(train_loader):
+        print('Train Epoch {}/{}'.format(epoch_index + 1, initial_epoch + epochs))
+        print('-' * 20)
 
+        G_epoch_loss_sum = 0
+        D_epoch_loss_sum = 0
+
+        # True Positive(真正，TP)：将正类预测为正类
+        # True Negative(真负，TN)：将负类预测为负类
+        # False Positive(假正，FP)：将负类预测为正类
+        # False Negative(假负，FN)：将正类预测为负类
+        epoch_TP_images = 0
+        epoch_TN_images = 0
+
+        epoch_begin = time.time()
+
+        for step_index, (images, labels) in enumerate(train_loader):
             step_input_images = images.shape[0]
-            
-            gan.D_optimizer.zero_grad()
-            
+
+            step_begin = time.time()
+
+            optimizer_D.zero_grad()
+
             real_images = images.to(device)
             real_labels = torch.ones(step_input_images, 1).to(device)
             real_outputs = gan.D(real_images)
-            
-            D_loss = gan.D_criterion(real_outputs, real_labels)
-            D_loss.backward()
-            
-            noises = get_noises(step_input_images, 128).to(device)
-            fake_images = gan.G(noises).detach()
-            fake_labels = torch.zeros(step_input_images, 1).to(device)
-            fake_outputs = gan.D(fake_images)
-            
-            D_loss = gan.D_criterion(fake_outputs, fake_labels)
-            D_loss.backward()
-            
-            gan.D_optimizer.step()
-            
-            gan.G_optimizer.zero_grad()
-            
+            D_real_loss = criterion_D(real_outputs, real_labels)
+            D_real_loss.backward()
+
             noises = get_noises(step_input_images, 128).to(device)
             fake_images = gan.G(noises)
-            fake_outputs = gan.D(fake_images)
-            
-            G_loss = gan.G_criterion(fake_outputs, real_labels)
+            fake_labels = torch.zeros(step_input_images, 1).to(device)
+            fake_outputs = gan.D(fake_images.detach())
+            D_fake_loss = criterion_D(fake_outputs, fake_labels)
+            D_fake_loss.backward()
+
+            optimizer_D.step()
+
+            optimizer_G.zero_grad()
+
+            noises = get_noises(step_input_images, 128).to(device)
+            sample_images = gan.G(noises)
+            sample_outputs = gan.D(sample_images)
+
+            G_loss = criterion_G(sample_outputs, real_labels)
             G_loss.backward()
-            
-            gan.G_optimizer.step()
+
+            optimizer_G.step()
+
+            step_end = time.time()
+            step_period = round((step_end - step_begin) * 1e3)
+
+            global_step += 1
+            G_step_loss = G_loss.item()
+            D_step_loss = (D_real_loss.item() + D_fake_loss.item()) / 2
+            G_epoch_loss_sum += G_step_loss * step_input_images
+            D_epoch_loss_sum += D_step_loss * step_input_images
+
+            step_TP_images = (real_outputs >= 0.5).sum().item()
+            step_TN_images = (fake_outputs < 0.5).sum().item()
+            epoch_TP_images += step_TP_images
+            epoch_TN_images += step_TN_images
+
+            if (step_index + 1) % log_interval_steps == 0:
+                torch.save(gan.state_dict(), parameters_pkl)
+                torch.save(optimizer_G.state_dict(), optimizer_G_pkl)
+                torch.save(optimizer_D.state_dict(), optimizer_D_pkl)
+
+                writer.add_scalars('train/loss', {'Generator': G_step_loss, 'Discriminator': D_step_loss}, global_step)
+                writer.add_scalars('train/accuracy', {'TP': step_TP_images / step_input_images, 'TN': step_TN_images / step_input_images, 'ACC': (step_TP_images + step_TN_images) / (2 * step_input_images)}, global_step)
+
+                print('Step {}/{}  Time: {:.0f}s {:.0f}ms  G_Loss: {:.4f}  D_Loss: {:.4f}  TP: {}/{} ({:.1f}%)  TN: {}/{} ({:.1f}%)  ACC: {}/{} ({:.1f}%)'.format(step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, G_step_loss, D_step_loss, step_TP_images, step_input_images, 1e2 * step_TP_images / step_input_images, step_TN_images, step_input_images, 1e2 * step_TN_images / step_input_images, step_TP_images + step_TN_images, 2 * step_input_images, 1e2 * (step_TP_images + step_TN_images) / (2 * step_input_images)))
+
+        epoch_end = time.time()
+        epoch_period = round((epoch_end - epoch_begin) * 1e3)
+
+        print('-' * 20)
+        print('Train Epoch {}/{}  Time: {:.0f}s {:.0f}ms  G_Loss: {:.4f}  D_Loss: {:.4f}  TP: {}/{} ({:.1f}%)  TN: {}/{} ({:.1f}%)  ACC: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, G_epoch_loss_sum / total_train_images, D_epoch_loss_sum / total_train_images,  epoch_TP_images, total_train_images, 1e2 * epoch_TP_images / total_train_images, epoch_TN_images, total_train_images, 1e2 * epoch_TN_images / total_train_images, epoch_TP_images + epoch_TN_images, 2 * total_train_images, 1e2 * (epoch_TP_images + epoch_TN_images) / (2 * total_train_images)))
+        print()
 
 global_step = 0
 fit(gan, epochs, 0)
 
 
 def evaluate(gan):
-    
-    with torch.no_grad():
-    
-        for step_index, (images, labels) in enumerate(test_loader):
+    global global_step
 
+    # 设置model.training为False，使模型中的Dropout和BatchNorm不起作用
+    gan.eval()
+
+    steps_total = len(test_loader)
+    G_total_loss_sum = 0
+    D_total_loss_sum = 0
+    total_TP_images = 0
+    total_TN_images = 0
+    total_input_images = 0
+
+    with torch.no_grad():
+        print('Eval')
+        print('-' * 20)
+
+        test_begin = time.time()
+
+        for step_index, (images, labels) in enumerate(test_loader):
             step_input_images = images.shape[0]
-            
+            total_input_images += step_input_images
+
+            step_begin = time.time()
+
             real_images = images.to(device)
             real_labels = torch.ones(step_input_images, 1).to(device)
             real_outputs = gan.D(real_images)
             
-            D_loss = gan.D_criterion(real_outputs, real_labels)
+            D_real_loss = criterion_D(real_outputs, real_labels)
             
             noises = get_noises(step_input_images, 128).to(device)
             fake_images = gan.G(noises)
             fake_labels = torch.zeros(step_input_images, 1).to(device)
             fake_outputs = gan.D(fake_images)
             
-            D_loss = gan.D_criterion(fake_outputs, fake_labels)
+            D_fake_loss = criterion_D(fake_outputs, fake_labels)
+            G_loss = criterion_G(fake_outputs, real_labels)
+
+            step_end = time.time()
+            step_period = round((step_end - step_begin) * 1e3)
+
+            global_step += 1
+            G_step_loss = G_loss.item()
+            D_step_loss = (D_real_loss.item() + D_fake_loss.item()) / 2
+            G_total_loss_sum += G_step_loss * step_input_images
+            D_total_loss_sum += D_step_loss * step_input_images
+
+            step_TP_images = (real_outputs >= 0.5).sum().item()
+            step_TN_images = (fake_outputs < 0.5).sum().item()
+            total_TP_images += step_TP_images
+            total_TN_images += step_TN_images
+
+            writer.add_scalars('test/loss', {'Generator': G_step_loss, 'Discriminator': D_step_loss}, global_step)
+            writer.add_scalars('test/accuracy', {'TP': step_TP_images / step_input_images, 'TN': step_TN_images / step_input_images, 'ACC': (step_TP_images + step_TN_images) / (2 * step_input_images)}, global_step)
+
+            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  G_Loss: {:.4f}  D_Loss: {:.4f}  TP: {}/{} ({:.1f}%)  TN: {}/{} ({:.1f}%)  ACC: {}/{} ({:.1f}%)'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, G_step_loss, D_step_loss, step_TP_images, step_input_images, 1e2 * step_TP_images / step_input_images, step_TN_images, step_input_images, 1e2 * step_TN_images / step_input_images, step_TP_images + step_TN_images, 2 * step_input_images, 1e2 * (step_TP_images + step_TN_images) / (2 * step_input_images)))
+
+
+        test_end = time.time()
+        test_period = round((test_end - test_begin) * 1e3)
+
+        print('-' * 20)
+        print('Eval  Time: {:.0f}s {:.0f}ms  G_Loss: {:.4f}  D_Loss: {:.4f}  TP: {}/{} ({:.1f}%)  TN: {}/{} ({:.1f}%)  ACC: {}/{} ({:.1f}%)'.format(int(test_period / 1e3), test_period % 1e3, G_total_loss_sum / total_input_images, D_total_loss_sum / total_input_images, total_TP_images, total_input_images, 1e2 * total_TP_images / total_input_images, total_TN_images, total_input_images, 1e2 * total_TN_images / total_input_images, total_TP_images + total_TN_images, 2 * total_input_images, 1e2 * (total_TP_images + total_TN_images) / (2 * total_input_images)))
+        print()
 
 global_step = 0
 evaluate(gan)
 
-# https://zhuanlan.zhihu.com/p/72279816
-# https://pytorch-lightning.readthedocs.io/en/stable/notebooks/lightning_examples/basic-gan.html
-# https://clay-atlas.com/blog/2020/01/09/pytorch-chinese-tutorial-mnist-generator-discriminator-mnist/
-# https://www.pytorchtutorial.com/50-lines-of-codes-for-gan/
-# https://github.com/devnag/pytorch-generative-adversarial-networks/blob/master/gan_pytorch.py
-# https://zhuanlan.zhihu.com/p/137571225
-# https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
+
+torch.save(gan, model_pkl)
+writer.add_graph(gan, torch.zeros(1, 128).to(device))
+writer.close()
+
+
+import matplotlib.pyplot as plt
+
+def visualize_model(model, num_images=10):
+    model.eval()
+
+    with torch.no_grad():
+        noises = get_noises(num_images, 128).to(device)
+        sample_images = gan(noises)
+        grid = tv.utils.make_grid(sample_images).permute(1, 2, 0)
+        plt.imshow(grid.cpu())
+    plt.show()
+
+visualize_model(gan)
