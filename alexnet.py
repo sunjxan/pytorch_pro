@@ -13,8 +13,7 @@ optimizer_pkl = 'alexnet-optimizer.pkl'
 epochs = 200
 batch_size_train = 100
 batch_size_val = 1000
-learning_rate = 0.01
-momentum = 0.5
+learning_rate = 1e-3
 log_interval_steps = 250
 # 对于可重复的实验，设置随机种子
 torch.manual_seed(seed=1)
@@ -94,7 +93,7 @@ model = model.to(device)
 # 损失函数
 criterion = nn.CrossEntropyLoss()
 # 优化器
-optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 if os.path.isfile(optimizer_pkl):
     optimizer.load_state_dict(torch.load(optimizer_pkl))
 

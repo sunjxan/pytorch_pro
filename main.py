@@ -14,7 +14,7 @@ train_ratio = .7
 epochs = 100
 batch_size_train = 70
 batch_size_test = 1000
-learning_rate = 0.01
+learning_rate = 1e-3
 # 对于可重复的实验，设置随机种子
 torch.manual_seed(seed=1)
 
@@ -104,7 +104,7 @@ model = model.to(device)
 # 损失函数
 criterion = nn.MSELoss()
 # 优化器
-optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 if os.path.isfile(optimizer_pkl):
     optimizer.load_state_dict(torch.load(optimizer_pkl))
 

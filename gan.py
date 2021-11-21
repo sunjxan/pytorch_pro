@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 
+import matplotlib.pyplot as plt
+
 import os, time
 
 
@@ -11,18 +13,19 @@ model_pkl = 'gan.pkl'
 parameters_pkl = 'gan-parameters.pkl'
 optimizer_G_pkl = 'gan-optimizer-G.pkl'
 optimizer_D_pkl = 'gan-optimizer-D.pkl'
-epochs = 200
+epochs = 500
 batch_size_train = 100
 batch_size_test = 1000
-learning_rate = 0.01
-momentum = 0.5
+learning_rate = 1e-3
 log_interval_steps = 100
+noise_size = 100
 # 对于可重复的实验，设置随机种子
 torch.manual_seed(seed=1)
 
 
 # 转换器，将PIL Image转换为Tensor，提供MNIST数据集单通道数据的平均值和标准差，将其转换为标准正态分布
-transform = tv.transforms.Compose([tv.transforms.ToTensor(), tv.transforms.Normalize((0.1307,), (0.3081,))])
+normalize = tv.transforms.Normalize((0.1307,), (0.3081,))
+transform = tv.transforms.Compose([tv.transforms.ToTensor(), normalize])
 if not os.path.isdir('./data/MNIST'):
     # 训练集，(60000, 2, 1, 28, 28)
     train_set = tv.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
@@ -41,14 +44,11 @@ class Generator(nn.Module):
     def __init__(self):
         super().__init__()
         self.model = nn.Sequential(
-            nn.Linear(in_features=128, out_features=256),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(in_features=256, out_features=512),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(in_features=512, out_features=1024),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(in_features=1024, out_features=28*28),
-            nn.Tanh()
+            nn.Linear(in_features=noise_size, out_features=200),
+            nn.LeakyReLU(0.02),
+            nn.LayerNorm(200),
+            nn.Linear(in_features=200, out_features=28*28),
+            nn.Sigmoid()
         )
     def forward(self, input):
         img = self.model(input)
@@ -59,11 +59,10 @@ class Discriminator(nn.Module):
         super().__init__()
         self.model = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(in_features=28*28, out_features=512),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(in_features=512, out_features=256),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(in_features=256, out_features=1),
+            nn.Linear(in_features=28*28, out_features=200),
+            nn.LeakyReLU(0.02),
+            nn.LayerNorm(200),
+            nn.Linear(in_features=200, out_features=1),
             nn.Sigmoid()
         )
     def forward(self, input):
@@ -101,15 +100,23 @@ gan = gan.to(device)
 criterion_G = nn.BCELoss()
 criterion_D = nn.BCELoss()
 # 优化器
-optimizer_G = optim.SGD(gan.G.parameters(), lr=learning_rate, momentum=momentum)        
-optimizer_D = optim.SGD(gan.D.parameters(), lr=learning_rate, momentum=momentum)
+optimizer_G = optim.Adam(gan.G.parameters(), lr=learning_rate)
+optimizer_D = optim.Adam(gan.D.parameters(), lr=learning_rate)
 if os.path.isfile(optimizer_G_pkl):
     optimizer_G.load_state_dict(torch.load(optimizer_G_pkl))
 if os.path.isfile(optimizer_D_pkl):
     optimizer_D.load_state_dict(torch.load(optimizer_D_pkl))
 
-def get_noises(*shape):
-    return torch.rand(shape)
+
+def get_noises(num_images):
+    return torch.randn(num_images, noise_size)
+
+def visualize_model(images, filename, dirname='gan-images'):
+    grid = tv.utils.make_grid(images, nrow=10).permute(1, 2, 0)
+    plt.imshow(grid.cpu())
+    if not os.path.isdir(dirname):
+        os.system('mkdir {:s}'.format(dirname))
+    plt.savefig('./{:s}/{:s}'.format(dirname, filename))
 
 def fit(gan, epochs, initial_epoch=0):
     global global_step
@@ -149,10 +156,10 @@ def fit(gan, epochs, initial_epoch=0):
             D_real_loss = criterion_D(real_outputs, real_labels)
             D_real_loss.backward()
 
-            noises = get_noises(step_input_images, 128).to(device)
-            fake_images = gan.G(noises)
+            noises = get_noises(step_input_images).to(device)
+            fake_images = gan.G(noises).detach()
             fake_labels = torch.zeros(step_input_images, 1).to(device)
-            fake_outputs = gan.D(fake_images.detach())
+            fake_outputs = gan.D(normalize(fake_images))
             D_fake_loss = criterion_D(fake_outputs, fake_labels)
             D_fake_loss.backward()
 
@@ -160,9 +167,9 @@ def fit(gan, epochs, initial_epoch=0):
 
             optimizer_G.zero_grad()
 
-            noises = get_noises(step_input_images, 128).to(device)
+            noises = get_noises(step_input_images).to(device)
             sample_images = gan.G(noises)
-            sample_outputs = gan.D(sample_images)
+            sample_outputs = gan.D(normalize(sample_images))
 
             G_loss = criterion_G(sample_outputs, real_labels)
             G_loss.backward()
@@ -184,6 +191,8 @@ def fit(gan, epochs, initial_epoch=0):
             epoch_TN_images += step_TN_images
 
             if (step_index + 1) % log_interval_steps == 0:
+                visualize_model(sample_images, 'gan-{:d}.png'.format(global_step))
+
                 torch.save(gan.state_dict(), parameters_pkl)
                 torch.save(optimizer_G.state_dict(), optimizer_G_pkl)
                 torch.save(optimizer_D.state_dict(), optimizer_D_pkl)
@@ -235,10 +244,10 @@ def evaluate(gan):
             
             D_real_loss = criterion_D(real_outputs, real_labels)
             
-            noises = get_noises(step_input_images, 128).to(device)
+            noises = get_noises(step_input_images).to(device)
             fake_images = gan.G(noises)
             fake_labels = torch.zeros(step_input_images, 1).to(device)
-            fake_outputs = gan.D(fake_images)
+            fake_outputs = gan.D(normalize(fake_images))
             
             D_fake_loss = criterion_D(fake_outputs, fake_labels)
             G_loss = criterion_G(fake_outputs, real_labels)
@@ -275,20 +284,5 @@ evaluate(gan)
 
 
 torch.save(gan, model_pkl)
-writer.add_graph(gan, torch.zeros(1, 128).to(device))
+writer.add_graph(gan, torch.zeros(1, noise_size).to(device))
 writer.close()
-
-
-import matplotlib.pyplot as plt
-
-def visualize_model(model, num_images=10):
-    model.eval()
-
-    with torch.no_grad():
-        noises = get_noises(num_images, 128).to(device)
-        sample_images = gan(noises)
-        grid = tv.utils.make_grid(sample_images).permute(1, 2, 0)
-        plt.imshow(grid.cpu())
-    plt.show()
-
-visualize_model(gan)
