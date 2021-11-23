@@ -78,7 +78,7 @@ optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 if os.path.isfile(optimizer_pkl):
     optimizer.load_state_dict(torch.load(optimizer_pkl))
 
-def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
+def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
     global global_step
 
     # 设置model.training为True，使模型中的Dropout和BatchNorm起作用
@@ -88,7 +88,7 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
     total_train_images = len(train_set)
 
     for epoch_index in range(initial_epoch, initial_epoch + epochs):
-        print('Train Epoch {}/{}'.format(epoch_index, initial_epoch + epochs))
+        print('Train Epoch {}/{}'.format(epoch_index, initial_epoch + epochs - 1))
         print('-' * 20)
 
         epoch_loss_sum = 0
@@ -131,7 +131,7 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
 
         print('-' * 20)
-        print('Epoch {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
+        print('Epoch {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index, initial_epoch + epochs - 1, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
         print()
 
     if baseline:
