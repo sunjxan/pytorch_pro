@@ -143,7 +143,7 @@ def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
             writer.add_scalars('test/accuracy', {'baseline': baseline_accuracy}, i)
             
 global_step = 0
-fit(model, optimizer, epochs, 1)
+fit(model, optimizer, epochs)
 
 
 def evaluate(model):
