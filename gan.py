@@ -211,7 +211,7 @@ def fit(gan, epochs, initial_epoch=1):
         print()
 
 global_step = 0
-fit(gan, epochs, 1)
+fit(gan, epochs)
 
 
 def evaluate(gan):
