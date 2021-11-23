@@ -88,7 +88,7 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
     total_train_images = len(train_set)
 
     for epoch_index in range(initial_epoch, initial_epoch + epochs):
-        print('Train Epoch {}/{}'.format(epoch_index + 1, initial_epoch + epochs))
+        print('Train Epoch {}/{}'.format(epoch_index, initial_epoch + epochs))
         print('-' * 20)
 
         epoch_loss_sum = 0
@@ -131,7 +131,7 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
 
         print('-' * 20)
-        print('Epoch {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
+        print('Epoch {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
         print()
 
     if baseline:
@@ -143,7 +143,7 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
             writer.add_scalars('test/accuracy', {'baseline': baseline_accuracy}, i)
             
 global_step = 0
-fit(model, optimizer, epochs, 0)
+fit(model, optimizer, epochs, 1)
 
 
 def evaluate(model):
