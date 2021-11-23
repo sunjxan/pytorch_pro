@@ -108,7 +108,7 @@ if os.path.isfile(optimizer_pkl):
     optimizer.load_state_dict(torch.load(optimizer_pkl))
 
 
-def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
+def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
     global global_step
 
     # 设置model.training为True，使模型中的Dropout和BatchNorm起作用
@@ -118,14 +118,14 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
     total_train_images = len(train_set)
 
     for epoch_index in range(initial_epoch, initial_epoch + epochs):
-        print('Train Epoch {}/{}'.format(epoch_index + 1, initial_epoch + epochs))
+        print('Train Epoch {}/{}'.format(epoch_index, initial_epoch + epochs - 1))
         print('-' * 20)
 
         epoch_loss_sum = 0
         epoch_correct_images = 0
         epoch_begin = time.time()
 
-        for step_index, (images, labels) in enumerate(train_loader):
+        for step_index, (images, labels) in enumerate(train_loader, 1):
             step_input_images = images.shape[0]
 
             step_begin = time.time()
@@ -148,20 +148,20 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
             step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
             epoch_correct_images += step_correct_images
             
-            if (step_index + 1) % log_interval_steps == 0:
+            if step_index % log_interval_steps == 0:
                 torch.save(model.state_dict(), parameters_pkl)
                 torch.save(optimizer.state_dict(), optimizer_pkl)
 
                 writer.add_scalar('train/loss', step_loss, global_step)
                 writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)
 
-                print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+                print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
 
         epoch_end = time.time()
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
 
         print('-' * 20)
-        print('Train Epoch {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index + 1, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
+        print('Train Epoch {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index, initial_epoch + epochs - 1, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
         print()
 
     if baseline:
@@ -173,7 +173,7 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
             writer.add_scalars('test/accuracy', {'baseline': baseline_accuracy}, i)
 
 global_step = 0
-fit(model, optimizer, epochs, 0)
+fit(model, optimizer, epochs)
 
 
 def evaluate(model):
@@ -193,7 +193,7 @@ def evaluate(model):
 
         test_begin = time.time()
 
-        for step_index, (images, labels) in enumerate(test_loader):
+        for step_index, (images, labels) in enumerate(test_loader, 1):
             step_input_images = images.shape[0]
             total_input_images += step_input_images
 
@@ -217,7 +217,7 @@ def evaluate(model):
             writer.add_scalars('test/loss', {'current': step_loss, 'average': total_loss_sum / total_input_images}, global_step)
             writer.add_scalars('test/accuracy', {'current': step_correct_images / step_input_images, 'average': total_correct_images / total_input_images}, global_step)
 
-            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
 
         test_end = time.time()
         test_period = round((test_end - test_begin) * 1e3)
