@@ -119,7 +119,7 @@ def visualize_model(images, filename, dirname='gan-images'):
     # plt.savefig('./{:s}/{:s}'.format(dirname, filename))
     tv.utils.save_image(images, './{:s}/{:s}'.format(dirname, filename), nrow=10)
 
-def fit(gan, epochs, initial_epoch=0):
+def fit(gan, epochs, initial_epoch=1):
     global global_step
 
     # 设置model.training为True，使模型中的Dropout和BatchNorm起作用
@@ -129,7 +129,7 @@ def fit(gan, epochs, initial_epoch=0):
     total_train_images = len(train_set)
 
     for epoch_index in range(initial_epoch, initial_epoch + epochs):
-        print('Train Epoch {}/{}'.format(epoch_index, initial_epoch + epochs))
+        print('Train Epoch {}/{}'.format(epoch_index, initial_epoch + epochs - 1))
         print('-' * 20)
 
         G_epoch_loss_sum = 0
@@ -207,7 +207,7 @@ def fit(gan, epochs, initial_epoch=0):
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
 
         print('-' * 20)
-        print('Train Epoch {}/{}  Time: {:.0f}s {:.0f}ms  G_Loss: {:.4f}  D_Loss: {:.4f}  TP: {}/{} ({:.1f}%)  TN: {}/{} ({:.1f}%)  ACC: {}/{} ({:.1f}%)'.format(epoch_index, initial_epoch + epochs, int(epoch_period / 1e3), epoch_period % 1e3, G_epoch_loss_sum / total_train_images, D_epoch_loss_sum / total_train_images,  epoch_TP_images, total_train_images, 1e2 * epoch_TP_images / total_train_images, epoch_TN_images, total_train_images, 1e2 * epoch_TN_images / total_train_images, epoch_TP_images + epoch_TN_images, 2 * total_train_images, 1e2 * (epoch_TP_images + epoch_TN_images) / (2 * total_train_images)))
+        print('Train Epoch {}/{}  Time: {:.0f}s {:.0f}ms  G_Loss: {:.4f}  D_Loss: {:.4f}  TP: {}/{} ({:.1f}%)  TN: {}/{} ({:.1f}%)  ACC: {}/{} ({:.1f}%)'.format(epoch_index, initial_epoch + epochs - 1, int(epoch_period / 1e3), epoch_period % 1e3, G_epoch_loss_sum / total_train_images, D_epoch_loss_sum / total_train_images,  epoch_TP_images, total_train_images, 1e2 * epoch_TP_images / total_train_images, epoch_TN_images, total_train_images, 1e2 * epoch_TN_images / total_train_images, epoch_TP_images + epoch_TN_images, 2 * total_train_images, 1e2 * (epoch_TP_images + epoch_TN_images) / (2 * total_train_images)))
         print()
 
 global_step = 0
