@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 import os, time
 
@@ -112,11 +112,12 @@ def get_noises(num_images):
     return torch.randn(num_images, noise_size)
 
 def visualize_model(images, filename, dirname='gan-images'):
-    grid = tv.utils.make_grid(images, nrow=10).permute(1, 2, 0)
-    plt.imshow(grid.cpu())
     if not os.path.isdir(dirname):
         os.system('mkdir {:s}'.format(dirname))
-    plt.savefig('./{:s}/{:s}'.format(dirname, filename))
+    # grid = tv.utils.make_grid(images, nrow=10).permute(1, 2, 0)
+    # plt.imshow(grid.cpu())
+    # plt.savefig('./{:s}/{:s}'.format(dirname, filename))
+    tv.utils.save_image(images, './{:s}/{:s}'.format(dirname, filename), nrow=10)
 
 def fit(gan, epochs, initial_epoch=0):
     global global_step
@@ -143,7 +144,7 @@ def fit(gan, epochs, initial_epoch=0):
 
         epoch_begin = time.time()
 
-        for step_index, (images, labels) in enumerate(train_loader):
+        for step_index, (images, labels) in enumerate(train_loader, 1):
             step_input_images = images.shape[0]
 
             step_begin = time.time()
@@ -190,7 +191,7 @@ def fit(gan, epochs, initial_epoch=0):
             epoch_TP_images += step_TP_images
             epoch_TN_images += step_TN_images
 
-            if (step_index + 1) % log_interval_steps == 0:
+            if step_index % log_interval_steps == 0:
                 visualize_model(sample_images, 'gan-{:d}.png'.format(global_step))
 
                 torch.save(gan.state_dict(), parameters_pkl)
@@ -200,7 +201,7 @@ def fit(gan, epochs, initial_epoch=0):
                 writer.add_scalars('train/loss', {'Generator': G_step_loss, 'Discriminator': D_step_loss}, global_step)
                 writer.add_scalars('train/accuracy', {'TP': step_TP_images / step_input_images, 'TN': step_TN_images / step_input_images, 'ACC': (step_TP_images + step_TN_images) / (2 * step_input_images)}, global_step)
 
-                print('Step {}/{}  Time: {:.0f}s {:.0f}ms  G_Loss: {:.4f}  D_Loss: {:.4f}  TP: {}/{} ({:.1f}%)  TN: {}/{} ({:.1f}%)  ACC: {}/{} ({:.1f}%)'.format(step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, G_step_loss, D_step_loss, step_TP_images, step_input_images, 1e2 * step_TP_images / step_input_images, step_TN_images, step_input_images, 1e2 * step_TN_images / step_input_images, step_TP_images + step_TN_images, 2 * step_input_images, 1e2 * (step_TP_images + step_TN_images) / (2 * step_input_images)))
+                print('Step {}/{}  Time: {:.0f}s {:.0f}ms  G_Loss: {:.4f}  D_Loss: {:.4f}  TP: {}/{} ({:.1f}%)  TN: {}/{} ({:.1f}%)  ACC: {}/{} ({:.1f}%)'.format(step_index, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, G_step_loss, D_step_loss, step_TP_images, step_input_images, 1e2 * step_TP_images / step_input_images, step_TN_images, step_input_images, 1e2 * step_TN_images / step_input_images, step_TP_images + step_TN_images, 2 * step_input_images, 1e2 * (step_TP_images + step_TN_images) / (2 * step_input_images)))
 
         epoch_end = time.time()
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
@@ -232,7 +233,7 @@ def evaluate(gan):
 
         test_begin = time.time()
 
-        for step_index, (images, labels) in enumerate(test_loader):
+        for step_index, (images, labels) in enumerate(test_loader, 1):
             step_input_images = images.shape[0]
             total_input_images += step_input_images
 
@@ -269,7 +270,7 @@ def evaluate(gan):
             writer.add_scalars('test/loss', {'Generator': G_step_loss, 'Discriminator': D_step_loss}, global_step)
             writer.add_scalars('test/accuracy', {'TP': step_TP_images / step_input_images, 'TN': step_TN_images / step_input_images, 'ACC': (step_TP_images + step_TN_images) / (2 * step_input_images)}, global_step)
 
-            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  G_Loss: {:.4f}  D_Loss: {:.4f}  TP: {}/{} ({:.1f}%)  TN: {}/{} ({:.1f}%)  ACC: {}/{} ({:.1f}%)'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, G_step_loss, D_step_loss, step_TP_images, step_input_images, 1e2 * step_TP_images / step_input_images, step_TN_images, step_input_images, 1e2 * step_TN_images / step_input_images, step_TP_images + step_TN_images, 2 * step_input_images, 1e2 * (step_TP_images + step_TN_images) / (2 * step_input_images)))
+            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  G_Loss: {:.4f}  D_Loss: {:.4f}  TP: {}/{} ({:.1f}%)  TN: {}/{} ({:.1f}%)  ACC: {}/{} ({:.1f}%)'.format(step_index, steps_total, int(step_period / 1e3), step_period % 1e3, G_step_loss, D_step_loss, step_TP_images, step_input_images, 1e2 * step_TP_images / step_input_images, step_TN_images, step_input_images, 1e2 * step_TN_images / step_input_images, step_TP_images + step_TN_images, 2 * step_input_images, 1e2 * (step_TP_images + step_TN_images) / (2 * step_input_images)))
 
 
         test_end = time.time()
