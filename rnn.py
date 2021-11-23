@@ -95,7 +95,7 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
         epoch_correct_images = 0
         epoch_begin = time.time()
 
-        for step_index, (images, labels) in enumerate(train_loader):
+        for step_index, (images, labels) in enumerate(train_loader, 1):
             step_input_images = images.shape[0]
 
             step_begin = time.time()
@@ -118,14 +118,14 @@ def fit(model, optimizer, epochs, initial_epoch=0, baseline=True):
             step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
             epoch_correct_images += step_correct_images
             
-            if (step_index + 1) % log_interval_steps == 0:
+            if step_index % log_interval_steps == 0:
                 torch.save(model.state_dict(), 'lenet-parameters.pkl')
                 torch.save(optimizer.state_dict(), 'lenet-optimizer.pkl')
 
                 writer.add_scalar('train/loss', step_loss, global_step)
                 writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)
 
-                print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index + 1, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+                print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
 
         epoch_end = time.time()
         epoch_period = round((epoch_end - epoch_begin) * 1e3)
@@ -163,7 +163,7 @@ def evaluate(model):
 
         test_begin = time.time()
 
-        for step_index, (images, labels) in enumerate(test_loader):
+        for step_index, (images, labels) in enumerate(test_loader, 1):
             step_input_images = images.shape[0]
             total_input_images += step_input_images
 
@@ -187,7 +187,7 @@ def evaluate(model):
             writer.add_scalars('test/loss', {'current': step_loss, 'average': total_loss_sum / total_input_images}, global_step)
             writer.add_scalars('test/accuracy', {'current': step_correct_images / step_input_images, 'average': total_correct_images / total_input_images}, global_step)
 
-            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index + 1, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
 
         test_end = time.time()
         test_period = round((test_end - test_begin) * 1e3)
