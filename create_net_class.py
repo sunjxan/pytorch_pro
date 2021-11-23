@@ -1,6 +1,6 @@
 import re
 
-def createNetClass(modulesString, num_classes=None, para_pth_path=None):
+def createNetClass(modulesString, para_pth_path=None, num_classes=None):
     ONE_SPACE = ' '
     IN_TAB_WIDTH = 2
     OUT_TAB_WIDTH = 4
@@ -37,9 +37,9 @@ def createNetClass(modulesString, num_classes=None, para_pth_path=None):
                 if num_classes is not None and i == size - 3:
                     begin = groups[1].find('out_features=') + len('out_features=')
                     end = groups[1].find(',', begin)
-                    body += '{:s}nn.{:s}{:d}{:s}{:s}\n'.format(3 * OUT_TAB, groups[1][:begin], num_classes, groups[1][end:], '' if i == last - 1 else ',')
+                    body += '{:s}nn.{:s}{:d}{:s},\n'.format(3 * OUT_TAB, groups[1][:begin], num_classes, groups[1][end:])
                 else:
-                    body += '{:s}nn.{:s}{:s}\n'.format(3 * OUT_TAB, groups[1], '' if i == last - 1 else ',')
+                    body += '{:s}nn.{:s},\n'.format(3 * OUT_TAB, groups[1])
             body += '{:s}{:s}\n'.format(2 * OUT_TAB, lines[last].strip())
     if para_pth_path is not None:
         body += '{:s}self.load_state_dict(torch.load("{:s}"))\n'.format(2 * OUT_TAB, para_pth_path)

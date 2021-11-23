@@ -41,38 +41,41 @@ test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size_test, 
 
 
 class Generator(nn.Module):
-    def __init__(self):
+    def __init__(self, image_size, noise_size=100):
         super().__init__()
         self.model = nn.Sequential(
-            nn.Linear(in_features=noise_size, out_features=200),
-            nn.LeakyReLU(0.02),
+            nn.Linear(noise_size, 200),
+            nn.LeakyReLU(0.02, True),
             nn.LayerNorm(200),
-            nn.Linear(in_features=200, out_features=28*28),
-            nn.Sigmoid()
+            nn.Linear(200, image_size[0] * image_size[1]),
+            nn.Sigmoid(),
         )
-    def forward(self, input):
-        img = self.model(input)
+
+    def forward(self, x):
+        img = self.model(x)
         return img.view(img.size(0), 1, 28, 28)
 
 class Discriminator(nn.Module):
-    def __init__(self):
+    def __init__(self, image_size):
         super().__init__()
         self.model = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(in_features=28*28, out_features=200),
-            nn.LeakyReLU(0.02),
+            nn.Linear(image_size[0] * image_size[1], 200),
+            nn.LeakyReLU(0.02, True),
             nn.LayerNorm(200),
-            nn.Linear(in_features=200, out_features=1),
-            nn.Sigmoid()
+            nn.Linear(200, 1),
+            nn.Sigmoid(),
         )
-    def forward(self, input):
-        return self.model(input)
+
+    def forward(self, x):
+        x = torch.flatten(x, 1)
+        return self.model(x)
 
 class GAN(nn.Module):
-    def __init__(self):
+    def __init__(self, image_size, noise_size=100):
         super().__init__()
-        self.G = Generator()
-        self.D = Discriminator()
+        self.G = Generator(image_size, noise_size)
+        self.D = Discriminator(image_size)
+
     def forward(self, input):
         return self.G(input)
 
@@ -90,7 +93,7 @@ else:
 # 程序中会对可见GPU重新从0编号
 device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
-gan = GAN()
+gan = GAN(image_size=(28, 28), noise_size=noise_size)
 if os.path.isfile(parameters_pkl):
     gan.load_state_dict(torch.load(parameters_pkl))
 if cuda_available and device_count > 1:

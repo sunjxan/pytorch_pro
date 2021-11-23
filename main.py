@@ -57,13 +57,14 @@ test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size_test, 
 
 
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, init_weights=True):
         super().__init__()
         self.bn = nn.BatchNorm1d(5)
-        self.fc1 = nn.Linear(in_features=5, out_features=10)
-        self.fc2 = nn.Linear(in_features=10, out_features=3)
+        self.fc1 = nn.Linear(5, 10)
+        self.fc2 = nn.Linear(10, 3)
         self.dropout = nn.Dropout(p=0.1)
-        self._init_parameters()
+        if init_weights:
+            self._initialize_weights()
 
     def forward(self, x):
         # (B, 5)
@@ -75,11 +76,14 @@ class Net(nn.Module):
         # (B, 3)
         return x
 
-    def _init_parameters(self):
-        for layer in self.modules():
-            if isinstance(layer, nn.Linear):
-                nn.init.normal_(layer.weight, 0, 0.01)
-                nn.init.zeros_(layer.bias)
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.BatchNorm1d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
 
 
 # 可视化 tensorboard --logdir=runs --bind_all
@@ -95,9 +99,11 @@ else:
 # 程序中会对可见GPU重新从0编号
 device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
-model = Net()
 if os.path.isfile(parameters_pkl):
+    model = Net(init_weights=False)
     model.load_state_dict(torch.load(parameters_pkl))
+else:
+    model = Net()
 if cuda_available and device_count > 1:
     model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
 model = model.to(device)

@@ -43,7 +43,8 @@ class Net(nn.Module):
         super().__init__()
         # 将batch维度放到最顶层
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(in_features=hidden_size, out_features=10, bias=True)
+        self.fc = nn.Linear(hidden_size, 10, bias=True)
+
     def forward(self, x):
         outputs, hxs = self.rnn(x)
         # 取输出的向量outputs中的最后一个向量最为最终输出

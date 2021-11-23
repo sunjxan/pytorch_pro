@@ -34,39 +34,38 @@ val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size_val, shu
 
 
 class AlexNet(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes=1000, init_weights=True):
         super().__init__()
         self.features = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=(11, 11), stride=(4, 4), padding=(2, 2)),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=0, dilation=1, ceil_mode=False),
-            nn.Conv2d(64, 192, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=0, dilation=1, ceil_mode=False),
-            nn.Conv2d(192, 384, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(384, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=0, dilation=1, ceil_mode=False)
+            nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
+            nn.ReLU(True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+            nn.Conv2d(64, 192, kernel_size=5, padding=2),
+            nn.ReLU(True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+            nn.Conv2d(192, 384, kernel_size=3, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(384, 256, kernel_size=3, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
         )
-        self.avgpool = nn.AdaptiveAvgPool2d(output_size=(6, 6))
+        self.avgpool = nn.AdaptiveAvgPool2d((6, 6))
         self.classifier = nn.Sequential(
-            nn.Dropout(p=0.5, inplace=False),
-            nn.Linear(in_features=9216, out_features=4096, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Dropout(p=0.5, inplace=False),
-            nn.Linear(in_features=4096, out_features=4096, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Linear(in_features=4096, out_features=1000, bias=True)
+            nn.Dropout(),
+            nn.Linear(256 * 6 * 6, 4096),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(True),
+            nn.Linear(4096, num_classes),
         )
-        # PyTorch版本不同预训练权重地址可能不同  https://download.pytorch.org/models/alexnet-owt-7be5be79.pth
-        self.load_state_dict(torch.load("/home/sunjian/.cache/torch/hub/checkpoints/alexnet-owt-7be5be79.pth"))
+
     def forward(self, x):
         x = self.features(x)
         x = self.avgpool(x)
-        x = nn.Flatten()(x)
+        x = torch.flatten(x, 1)
         x = self.classifier(x)
         return x
 
@@ -87,6 +86,9 @@ device = torch.device("cuda:0" if cuda_available else "cpu")
 model = AlexNet()
 if os.path.isfile(parameters_pkl):
     model.load_state_dict(torch.load(parameters_pkl))
+else:
+    # PyTorch版本不同预训练权重地址可能不同  https://download.pytorch.org/models/alexnet-owt-7be5be79.pth
+    model.load_state_dict(torch.load("/home/sunjian/.cache/torch/hub/checkpoints/alexnet-owt-7be5be79.pth"))
 if cuda_available and device_count > 1:
     model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
 model = model.to(device)

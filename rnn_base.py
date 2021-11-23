@@ -15,7 +15,8 @@ class RNNCell(nn.Module):
         self.tanh = tanh
         self.fc_ih = nn.Linear(input_size, hidden_size, bias=bias)
         self.fc_hh = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self._init_parameters()
+        self._initialize_weights()
+
     # input: (batch, input_size)
     # hx: (batch, hidden_size)
     # output: (batch, hidden_size)
@@ -25,7 +26,8 @@ class RNNCell(nn.Module):
             output += self.fc_hh(hx)
         output = torch.tanh(output) if self.tanh else torch.relu(output)
         return output
-    def _init_parameters(self):
+
+    def _initialize_weights(self):
         k = math.sqrt(1 / self.hidden_size)
         nn.init.uniform_(self.fc_ih.weight, -k, k)
         nn.init.uniform_(self.fc_hh.weight, -k, k)
@@ -37,6 +39,7 @@ class RNNSection(nn.Module):
     def __init__(self, input_size, hidden_size, bias=True, tanh=True):
         super().__init__()
         self.cell = RNNCell(input_size, hidden_size, bias, tanh)
+
     # inputs: (seq, batch, input_size)
     # hx: (batch, hidden_size)
     # outputs: (seq, batch, hidden_size)
@@ -57,6 +60,7 @@ class RNN(nn.Module):
                 self.layers.append(RNNSection(input_size, hidden_size, bias, tanh))
             else:
                 self.layers.append(RNNSection(hidden_size, hidden_size, bias, tanh))
+
     # inputs: (seq, batch, input_size)
     # hxs: (num_layers, batch, hidden_size)
     # outputs: (seq, batch, hidden_size)

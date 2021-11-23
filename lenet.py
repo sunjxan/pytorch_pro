@@ -36,49 +36,56 @@ test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size_test, 
 
 
 class LeNet(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes=10, init_weights=True):
         # 为提高精度，将AvgPool2d改为MaxPool2d，Sigmoid改为ReLU
         super().__init__()
         # 卷积/池化后大小为 math.ceil((W - kernel_size + 1 + 2 * padding) / stride)
         self.features = nn.Sequential(
             # (B, 1, 28, 28)
-            # 因为MNIST数据集图片大小为28*28，不是32*32，所以修改padding为(2, 2)
-            nn.Conv2d(1, 6, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)),
+            # 因为MNIST数据集图片大小为28*28，不是32*32，所以修改padding为2
+            nn.Conv2d(1, 6, kernel_size=5, padding=2),
             # (B, 6, 28, 28)
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=0, ceil_mode=False),
+            nn.ReLU(True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             # (B, 6, 14, 14)
-            nn.Conv2d(6, 16, kernel_size=(5, 5), stride=(1, 1), padding=(0, 0)),
+            nn.Conv2d(6, 16, kernel_size=5),
             # (B, 16, 10, 10)
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=0, ceil_mode=False)
+            nn.ReLU(True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
             # (B, 16, 5, 5)
         )
         self.classifier = nn.Sequential(
             # (B, 400)
-            nn.Linear(in_features=400, out_features=120, bias=True),
+            nn.Linear(16 * 5 * 5, 120),
             # (B, 120)
-            nn.ReLU(),
-            nn.Linear(in_features=120, out_features=84, bias=True),
+            nn.ReLU(True),
+            nn.Linear(120, 84),
             # (B, 84)
-            nn.ReLU(),
-            nn.Linear(in_features=84, out_features=10, bias=True)
+            nn.ReLU(True),
+            nn.Linear(84, num_classes),
             # (B, 10)
         )
-        self._init_parameters()
+        if init_weights:
+            self._initialize_weights()
+
     def forward(self, x):
         x = self.features(x)
-        x = nn.Flatten()(x)
+        x = torch.flatten(x, 1)
         x = self.classifier(x)
         return x
-    def _init_parameters(self):
-        for layer in self.modules():
-            if isinstance(layer, nn.Conv2d):
-                nn.init.kaiming_normal_(layer.weight, mode='fan_out', nonlinearity='relu')
-                nn.init.zeros_(layer.bias)
-            elif isinstance(layer, nn.Linear):
-                nn.init.normal_(layer.weight, 0, 0.01)
-                nn.init.zeros_(layer.bias)
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
 
 
 # 可视化 tensorboard --logdir=runs-lenet --bind_all
@@ -94,9 +101,11 @@ else:
 # 程序中会对可见GPU重新从0编号
 device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
-model = LeNet()
 if os.path.isfile(parameters_pkl):
+    model = LeNet(init_weights=False)
     model.load_state_dict(torch.load(parameters_pkl))
+else:
+    model = LeNet()
 if cuda_available and device_count > 1:
     model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
 model = model.to(device)
