@@ -85,19 +85,18 @@ class GAN(nn.Module):
 writer = SummaryWriter(logdir='runs-gan')
 # 设备
 # 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 filename.py
-cuda_available = torch.cuda.is_available()
-if cuda_available:
+# 程序中会对可见GPU重新从0编号
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+if device.type == 'cuda':
     device_count = torch.cuda.device_count()
     print('use {} gpu(s)'.format(device_count))
 else:
     print('use cpu')
-# 程序中会对可见GPU重新从0编号
-device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
 gan = GAN(image_size=(28, 28), noise_size=noise_size)
 if os.path.isfile(parameters_pkl):
     gan.load_state_dict(torch.load(parameters_pkl))
-if cuda_available and device_count > 1:
+if device.type == 'cuda' and device_count > 1:
     gan = nn.DataParallel(gan, device_ids=list(range(device_count)), output_device=0)
 gan = gan.to(device)
 # 损失函数
