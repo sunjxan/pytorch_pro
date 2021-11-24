@@ -85,7 +85,9 @@ class AlexNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
 # PyTorch版本不同预训练权重地址可能不同
-model_url = 'https://download.pytorch.org/models/alexnet-owt-7be5be79.pth'
+model_urls = {
+    'alexnet': 'https://download.pytorch.org/models/alexnet-owt-7be5be79.pth'
+}
 
 
 # 可视化 tensorboard --logdir=runs-alexnet --bind_all
