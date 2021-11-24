@@ -43,7 +43,7 @@ class Net(nn.Module):
         super().__init__()
         # 将batch维度放到最顶层
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 10, bias=True)
+        self.fc = nn.Linear(hidden_size, 10)
 
     def forward(self, x):
         outputs, hxs = self.rnn(x)
