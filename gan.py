@@ -128,7 +128,7 @@ def visualize_model(images, filename):
 def fit(gan, epochs, initial_epoch=1):
     global global_step
 
-    # 设置model.training为True，使模型中的Dropout和BatchNorm起作用
+    # 设置model.training为True
     gan.train()
 
     steps_per_epoch = len(train_loader)
@@ -223,7 +223,7 @@ fit(gan, epochs)
 def evaluate(gan):
     global global_step
 
-    # 设置model.training为False，使模型中的Dropout和BatchNorm不起作用
+    # 设置model.training为False
     gan.eval()
 
     steps_total = len(test_loader)

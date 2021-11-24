@@ -117,7 +117,7 @@ if os.path.isfile(optimizer_pkl):
 def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
     global global_step
 
-    # 设置model.training为True，使模型中的Dropout和BatchNorm起作用
+    # 设置model.training为True
     model.train()
 
     steps_per_epoch = len(train_loader)
@@ -177,7 +177,7 @@ fit(model, optimizer, epochs)
 def evaluate(model):
     global global_step
 
-    # 设置model.training为False，使模型中的Dropout和BatchNorm不起作用
+    # 设置model.training为False
     model.eval()
 
     steps_total = len(test_loader)

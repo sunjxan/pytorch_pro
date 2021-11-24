@@ -85,12 +85,25 @@ class VGG(nn.Module):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.constant_(m.bias, 0)
 
+# PyTorch版本不同预训练权重地址可能不同
+model_urls = {
+    'vgg11': 'https://download.pytorch.org/models/vgg11-8a719046.pth',
+    'vgg13': 'https://download.pytorch.org/models/vgg13-19584684.pth',
+    'vgg16': 'https://download.pytorch.org/models/vgg16-397923af.pth',
+    'vgg19': 'https://download.pytorch.org/models/vgg19-dcbb9e9d.pth',
+    'vgg11_bn': 'https://download.pytorch.org/models/vgg11_bn-6002323d.pth',
+    'vgg13_bn': 'https://download.pytorch.org/models/vgg13_bn-abd245e5.pth',
+    'vgg16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',
+    'vgg19_bn': 'https://download.pytorch.org/models/vgg19_bn-c79401a0.pth',
+}
+
 cfgs = {
     'A': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
     'B': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
     'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
 }
+
 # vgg11 = VGG(make_layers(cfgs['A']))
 # vgg11_bn = VGG(make_layers(cfgs['A'], batch_norm=True))
 # vgg13 = VGG(make_layers(cfgs['B']))
@@ -114,7 +127,7 @@ else:
     print('use cpu')
 # 模型
 if os.path.isfile(parameters_pkl):
-    model = VGG(make_layers(cfgs['D']))
+    model = VGG(make_layers(cfgs['D']), init_weights=False)
     model.load_state_dict(torch.load(parameters_pkl))
 else:
     model = VGG(make_layers(cfgs['D']))
@@ -132,7 +145,7 @@ if os.path.isfile(optimizer_pkl):
 def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
     global global_step
 
-    # 设置model.training为True，使模型中的Dropout和BatchNorm起作用
+    # 设置model.training为True
     model.train()
 
     steps_per_epoch = len(train_loader)
@@ -200,7 +213,7 @@ fit(model, optimizer, epochs)
 def evaluate(model):
     global global_step
 
-    # 设置model.training为False，使模型中的Dropout和BatchNorm不起作用
+    # 设置model.training为False
     model.eval()
 
     steps_total = len(val_loader)

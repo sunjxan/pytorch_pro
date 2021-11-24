@@ -8,7 +8,7 @@ import os, time
 
 
 model_pkl = 'alexnet.pkl'
-parameters_pkl = 'alexnet-parameters.pkl'  # PyTorch版本不同预训练权重地址可能不同  https://download.pytorch.org/models/alexnet-owt-7be5be79.pth
+parameters_pkl = 'alexnet-parameters.pkl'
 optimizer_pkl = 'alexnet-optimizer.pkl'
 epochs = 200
 batch_size_train = 100
@@ -71,7 +71,6 @@ class AlexNet(nn.Module):
         x = self.classifier(x)
         return x
 
-
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -84,6 +83,9 @@ class AlexNet(nn.Module):
             elif isinstance(m, nn.Linear):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.constant_(m.bias, 0)
+
+# PyTorch版本不同预训练权重地址可能不同
+model_url = 'https://download.pytorch.org/models/alexnet-owt-7be5be79.pth'
 
 
 # 可视化 tensorboard --logdir=runs-alexnet --bind_all
@@ -117,7 +119,7 @@ if os.path.isfile(optimizer_pkl):
 def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
     global global_step
 
-    # 设置model.training为True，使模型中的Dropout和BatchNorm起作用
+    # 设置model.training为True
     model.train()
 
     steps_per_epoch = len(train_loader)
@@ -185,7 +187,7 @@ fit(model, optimizer, epochs)
 def evaluate(model):
     global global_step
 
-    # 设置model.training为False，使模型中的Dropout和BatchNorm不起作用
+    # 设置model.training为False
     model.eval()
 
     steps_total = len(val_loader)
