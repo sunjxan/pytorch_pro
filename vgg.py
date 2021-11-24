@@ -8,7 +8,7 @@ import os, time
 
 
 model_pkl = 'vgg.pkl'
-parameters_pkl = 'vgg-parameters.pkl'  # PyTorch版本不同预训练权重地址可能不同  https://download.pytorch.org/models/vgg11_bn-6002323d.pth
+parameters_pkl = 'vgg-parameters.pkl'
 optimizer_pkl = 'vgg-optimizer.pkl'
 epochs = 200
 batch_size_train = 100
@@ -32,8 +32,6 @@ train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size_trai
 # 测试数据生成器
 val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size_val, shuffle=False)
 
-
-cfg = [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M']
 
 def make_layers(cfg, batch_norm=False):
     layers = []
@@ -87,6 +85,21 @@ class VGG(nn.Module):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.constant_(m.bias, 0)
 
+cfgs = {
+    'A': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
+    'B': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
+    'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
+    'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
+}
+# vgg11 = VGG(make_layers(cfgs['A']))
+# vgg11_bn = VGG(make_layers(cfgs['A'], batch_norm=True))
+# vgg13 = VGG(make_layers(cfgs['B']))
+# vgg13_bn = VGG(make_layers(cfgs['B'], batch_norm=True))
+# vgg16 = VGG(make_layers(cfgs['D']))
+# vgg16_bn = VGG(make_layers(cfgs['D'], batch_norm=True))
+# vgg19 = VGG(make_layers(cfgs['E']))
+# vgg19_bn = VGG(make_layers(cfgs['E'], batch_norm=True))
+
 
 # 可视化 tensorboard --logdir=runs-vgg --bind_all
 writer = SummaryWriter(logdir='runs-vgg')
@@ -102,10 +115,10 @@ else:
 device = torch.device("cuda:0" if cuda_available else "cpu")
 # 模型
 if os.path.isfile(parameters_pkl):
-    model = VGG(make_layers(cfg, batch_norm=True), init_weights=False)
+    model = VGG(make_layers(cfgs['D']))
     model.load_state_dict(torch.load(parameters_pkl))
 else:
-    model = VGG(make_layers(cfg, batch_norm=True))
+    model = VGG(make_layers(cfgs['D']))
 if cuda_available and device_count > 1:
     model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
 model = model.to(device)
