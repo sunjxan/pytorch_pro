@@ -1,6 +1,6 @@
 import re
 
-def createNetClass(modulesString, para_pth_path=None, num_classes=None):
+def createNetClass(modulesString, num_classes=None):
     ONE_SPACE = ' '
     IN_TAB_WIDTH = 2
     OUT_TAB_WIDTH = 4
@@ -41,8 +41,6 @@ def createNetClass(modulesString, para_pth_path=None, num_classes=None):
                 else:
                     body += '{:s}nn.{:s},\n'.format(3 * OUT_TAB, groups[1])
             body += '{:s}{:s}\n'.format(2 * OUT_TAB, lines[last].strip())
-    if para_pth_path is not None:
-        body += '{:s}self.load_state_dict(torch.load("{:s}"))\n'.format(2 * OUT_TAB, para_pth_path)
     funcs.insert(-1, 'nn.Flatten()')
     footer = '''{:s}def forward(self, x):\n{:s}{:s}return x\n'''.format(OUT_TAB, ''.join(['{:s}x = {:s}(x)\n'.format(2 * OUT_TAB, func) for func in funcs]), 2 * OUT_TAB)
     return header + body + footer
