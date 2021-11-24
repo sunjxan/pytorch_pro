@@ -41,29 +41,29 @@ class LeNet(nn.Module):
         super().__init__()
         # 卷积/池化后大小为 math.ceil((W - kernel_size + 1 + 2 * padding) / stride)
         self.features = nn.Sequential(
-            # (B, 1, 28, 28)
+            # N x 1 x 28 x 28
             # 因为MNIST数据集图片大小为28*28，不是32*32，所以修改padding为2
             nn.Conv2d(1, 6, kernel_size=5, padding=2),
-            # (B, 6, 28, 28)
+            # N x 6 x 28 x 28
             nn.ReLU(True),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            # (B, 6, 14, 14)
+            # N x 6 x 14 x 14
             nn.Conv2d(6, 16, kernel_size=5),
-            # (B, 16, 10, 10)
+            # N x 16 x 10 x 10
             nn.ReLU(True),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            # (B, 16, 5, 5)
+            # N x 16 x 5 x 5
         )
         self.classifier = nn.Sequential(
-            # (B, 400)
+            # N x 400
             nn.Linear(16 * 5 * 5, 120),
-            # (B, 120)
+            # N x 120
             nn.ReLU(True),
             nn.Linear(120, 84),
-            # (B, 84)
+            # N x 84
             nn.ReLU(True),
             nn.Linear(84, num_classes),
-            # (B, 10)
+            # N x 10
         )
         if init_weights:
             self._initialize_weights()
