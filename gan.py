@@ -13,6 +13,7 @@ model_pkl = 'gan.pkl'
 parameters_pkl = 'gan-parameters.pkl'
 optimizer_G_pkl = 'gan-optimizer-G.pkl'
 optimizer_D_pkl = 'gan-optimizer-D.pkl'
+images_dirname = 'gan-images'
 epochs = 500
 batch_size_train = 100
 batch_size_test = 1000
@@ -110,17 +111,20 @@ if os.path.isfile(optimizer_G_pkl):
 if os.path.isfile(optimizer_D_pkl):
     optimizer_D.load_state_dict(torch.load(optimizer_D_pkl))
 
+if os.path.isdir(images_dirname):
+    os.system('rm -rf {:s}/*'.format(images_dirname))
+else:
+    os.system('mkdir {:s}'.format(images_dirname))
+
 
 def get_noises(num_images):
     return torch.randn(num_images, noise_size)
 
-def visualize_model(images, filename, dirname='gan-images'):
-    if not os.path.isdir(dirname):
-        os.system('mkdir {:s}'.format(dirname))
+def visualize_model(images, filename):
     # grid = tv.utils.make_grid(images, nrow=10).permute(1, 2, 0)
     # plt.imshow(grid.cpu())
-    # plt.savefig('./{:s}/{:s}'.format(dirname, filename))
-    tv.utils.save_image(images, './{:s}/{:s}'.format(dirname, filename), nrow=10)
+    # plt.savefig('./{:s}/{:s}'.format(images_dirname, filename))
+    tv.utils.save_image(images, './{:s}/{:s}'.format(images_dirname, filename), nrow=10)
 
 def fit(gan, epochs, initial_epoch=1):
     global global_step
