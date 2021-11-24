@@ -43,7 +43,7 @@ class BasicBlock(nn.Module):
         x = self.bn2(x)
 
         if self.downsample is not None:
-            identity = self.downsample(x)
+            identity = self.downsample(identity)
 
         x += identity
         x = self.relu(x)
@@ -81,7 +81,7 @@ class Bottleneck(nn.Module):
         x = self.bn3(x)
 
         if self.downsample is not None:
-            identity = self.downsample(x)
+            identity = self.downsample(identity)
 
         x += identity
         x = self.relu(x)
@@ -100,6 +100,7 @@ class ResNet(nn.Module):
             replace_stride_with_dilation = [False, False, False]
         self.groups = groups
         self.base_width = width_per_group
+
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
