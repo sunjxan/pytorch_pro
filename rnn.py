@@ -39,14 +39,14 @@ test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size_test, 
 
 
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, input_size, hidden_size, num_layers):
         super().__init__()
         # 将batch维度放到最顶层
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_size, 10)
 
     def forward(self, x):
-        outputs, hxs = self.rnn(x)
+        outputs, hns = self.rnn(x)
         # 取输出的向量outputs中的最后一个向量最为最终输出
         x = outputs[:, -1, :]
         x = self.fc(x)
@@ -65,7 +65,7 @@ if device.type == 'cuda':
 else:
     print('use cpu')
 # 模型
-model = Net()
+model = Net(input_size, hidden_size, num_layers)
 if os.path.isfile(parameters_pkl):
     model.load_state_dict(torch.load(parameters_pkl))
 if device.type == 'cuda' and device_count > 1:
