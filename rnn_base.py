@@ -62,9 +62,8 @@ class RNN(nn.Module):
                 self.layers.append(RNNSection(hidden_size, hidden_size, bias, tanh))
 
     # inputs: (seq, batch, input_size)
-    # hxs: (num_layers, batch, hidden_size)
+    # hxs, hns: (num_layers, batch, hidden_size)
     # outputs: (seq, batch, hidden_size)
-    # hns: (num_layers, batch, hidden_size)
     def forward(self, inputs, hxs=None):
         hns = []
         for i in range(self.num_layers):
