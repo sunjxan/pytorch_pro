@@ -66,11 +66,9 @@ class RNN(nn.Module):
     # outputs: (seq, batch, hidden_size)
     # output_hxs: (num_layers, batch, hidden_size)
     def forward(self, inputs, hxs=None):
-        if hxs is None:
-            hxs = [None] * self.num_layers
         output_hxs = []
         for i in range(self.num_layers):
-            inputs, output_hx = self.layers[i](inputs, hxs[i])
+            inputs, output_hx = self.layers[i](inputs, None if hxs is None else hxs[i])
             output_hxs.append(output_hx)
         return inputs, torch.stack(output_hxs)
 
