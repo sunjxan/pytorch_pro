@@ -25,8 +25,8 @@ class LSTMCell(nn.Module):
         self._initialize_weights()
 
     # input: (batch, input_size)
-    # hcx: (hx, cx)
-    # hx, cx, h, c: (batch, hidden_size)
+    # hcx = (hx, cx)
+    # hx, cx, hn, cn: (batch, hidden_size)
     def forward(self, input, hcx=None):
         hx = cx = None
         if hcx is not None:
@@ -43,14 +43,14 @@ class LSTMCell(nn.Module):
             o += self.fc_ho(hx)
         i = torch.sigmoid(i)
         f = torch.sigmoid(f)
-        g = torch.sigmoid(g)
+        g = torch.tanh(g)
         o = torch.sigmoid(o)
 
-        c = i * g
+        cn = i * g
         if cx is not None:
-            c += f * cx
-        h = o * torch.tanh(c)
-        return h, c
+            cn += f * cx
+        hn = o * torch.tanh(cn)
+        return hn, cn
 
     def _initialize_weights(self):
         k = math.sqrt(1 / self.hidden_size)
@@ -78,7 +78,7 @@ class LSTMSection(nn.Module):
         self.cell = LSTMCell(input_size, hidden_size, bias)
 
     # inputs: (seq, batch, input_size)
-    # hcx: (hx, cx)
+    # hcx = (hx, cx)
     # hx, cx: (batch, hidden_size)
     # outputs: (seq, batch, hidden_size)
     def forward(self, inputs, hcx=None):
@@ -103,55 +103,16 @@ class LSTM(nn.Module):
                 self.layers.append(LSTMSection(hidden_size, hidden_size, bias))
 
     # inputs: (seq, batch, input_size)
-    # hcxs: (num_layers, batch, 2, hidden_size)
+    # hcxs = (hxs, cxs)
+    # hxs, cxs, hns, cns: (num_layers, batch, hidden_size)
     # outputs: (seq, batch, hidden_size)
-    # output_hcxs: (num_layers, batch, 2, hidden_size)
     def forward(self, inputs, hcxs=None):
-        if hcxs is None:
-            hcxs = [None] * self.num_layers
-        output_hxs = []
-        output_cxs = []
+        if hcxs is not None:
+            hxs, cxs = hcxs
+        hns = []
+        cns = []
         for i in range(self.num_layers):
-            inputs, (hx, cx) = self.layers[i](inputs, hcxs[i])
-            output_hxs.append(hx)
-            output_cxs.append(cx)
-        return inputs, (torch.stack(output_hxs), torch.stack(output_cxs))
-
-
-rnn = nn.LSTM(10, 20, 2)
-input = torch.randn(5, 3, 10)
-h0 = torch.randn(2, 3, 20)
-c0 = torch.randn(2, 3, 20)
-output, (hn, cn) = rnn(input, (h0, c0))
-print(output.shape, hn.shape, cn.shape)
-
-rnn = LSTM(10, 20, 2)
-input = torch.randn(5, 3, 10)
-h0 = torch.randn(2, 3, 20)
-c0 = torch.randn(2, 3, 20)
-output, (hn, cn) = rnn(input, (h0, c0))
-print(output.shape, hn.shape, cn.shape)
-
-# input = torch.randn(5, 2, 3)
-# h0 = torch.randn(2, 2, 4)
-# c0 = torch.rand(2, 2, 4)
-
-# # 验证
-# LSTM = LSTM(3, 4, 2)
-# L = [list(cell.parameters()) for cell in LSTM.layers]
-# size = len(L)
-# D = []
-# for i in range(size):
-#     D.append(['weight_ih_l' + str(i), L[i][0]])
-#     D.append(['weight_hh_l' + str(i), L[i][2]])
-#     D.append(['bias_ih_l' + str(i), L[i][1]])
-#     D.append(['bias_hh_l' + str(i), L[i][3]])
-# D = OrderedDict(D)
-
-# # PyTorch LSTM
-# LSTM2 = nn.LSTM(3, 4, 2)
-# LSTM2.load_state_dict(D)
-
-# output, hn = LSTM(input, h0)
-# output2, hn2 = LSTM2(input, h0)
-# print(torch.all(output == output2), torch.all(hn == hn2))
+            inputs, (hx, cx) = self.layers[i](inputs, None if hcxs is None else (hxs[i], cxs[i]))
+            hns.append(hx)
+            cns.append(cx)
+        return inputs, (torch.stack(hns), torch.stack(cns))
