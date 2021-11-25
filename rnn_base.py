@@ -64,13 +64,13 @@ class RNN(nn.Module):
     # inputs: (seq, batch, input_size)
     # hxs: (num_layers, batch, hidden_size)
     # outputs: (seq, batch, hidden_size)
-    # output_hxs: (num_layers, batch, hidden_size)
+    # hns: (num_layers, batch, hidden_size)
     def forward(self, inputs, hxs=None):
-        output_hxs = []
+        hns = []
         for i in range(self.num_layers):
-            inputs, output_hx = self.layers[i](inputs, None if hxs is None else hxs[i])
-            output_hxs.append(output_hx)
-        return inputs, torch.stack(output_hxs)
+            inputs, hn = self.layers[i](inputs, None if hxs is None else hxs[i])
+            hns.append(hn)
+        return inputs, torch.stack(hns)
 
 
 input = torch.randn(5, 2, 3)
