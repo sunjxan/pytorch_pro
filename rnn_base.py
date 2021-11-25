@@ -3,8 +3,6 @@ import torch.nn as nn
 
 import math
 
-from collections import OrderedDict
-
 
 class RNNCell(nn.Module):
     def __init__(self, input_size, hidden_size, bias=True, tanh=True):
@@ -67,10 +65,12 @@ class RNN(nn.Module):
     def forward(self, inputs, hxs=None):
         hns = []
         for i in range(self.num_layers):
-            inputs, hn = self.layers[i](inputs, None if hxs is None else hxs[i])
+            inputs, hn = self.layers[i](inputs, hxs and hxs[i])
             hns.append(hn)
         return inputs, torch.stack(hns)
 
+
+from collections import OrderedDict
 
 input = torch.randn(5, 2, 3)
 h0 = torch.randn(2, 2, 4)

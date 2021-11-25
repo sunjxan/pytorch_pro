@@ -3,8 +3,6 @@ import torch.nn as nn
 
 import math
 
-from collections import OrderedDict
-
 
 class LSTMCell(nn.Module):
     def __init__(self, input_size, hidden_size, bias=True):
@@ -112,7 +110,7 @@ class LSTM(nn.Module):
         hns = []
         cns = []
         for i in range(self.num_layers):
-            inputs, (hx, cx) = self.layers[i](inputs, None if hcxs is None else (hxs[i], cxs[i]))
-            hns.append(hx)
-            cns.append(cx)
+            inputs, (hn, cn) = self.layers[i](inputs, None if hcxs is None else (hxs[i], cxs[i]))
+            hns.append(hn)
+            cns.append(cn)
         return inputs, (torch.stack(hns), torch.stack(cns))
