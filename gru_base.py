@@ -29,9 +29,10 @@ class GRUCell(nn.Module):
         if hx is not None:
             r += self.fc_hr(hx)
             z += self.fc_hz(hx)
-            n += self.fc_hn(hx)
         r = torch.sigmoid(r)
         z = torch.sigmoid(z)
+        if hx is not None:
+            n += r * self.fc_hn(hx)
         n = torch.tanh(n)
 
         hn = (1 - z) * n
