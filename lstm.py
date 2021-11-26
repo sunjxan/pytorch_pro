@@ -119,8 +119,8 @@ def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
             epoch_correct_images += step_correct_images
             
             if step_index % log_interval_steps == 0:
-                torch.save(model.state_dict(), 'lenet-parameters.pkl')
-                torch.save(optimizer.state_dict(), 'lenet-optimizer.pkl')
+                torch.save(model.state_dict(), parameters_pkl)
+                torch.save(optimizer.state_dict(), optimizer_pkl)
 
                 writer.add_scalar('train/loss', step_loss, global_step)
                 writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)

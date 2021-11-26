@@ -88,6 +88,6 @@ class GRU(nn.Module):
     def forward(self, inputs, hxs=None):
         hns = []
         for i in range(self.num_layers):
-            inputs, hn = self.layers[i](inputs, hxs and hxs[i])
+            inputs, hn = self.layers[i](inputs, None if hxs is None else hxs[i])
             hns.append(hn)
         return inputs, torch.stack(hns)

@@ -7,9 +7,9 @@ from tensorboardX import SummaryWriter
 import os, time
 
 
-model_pkl = 'rnn.pkl'
-parameters_pkl = 'rnn-parameters.pkl'
-optimizer_pkl = 'rnn-optimizer.pkl'
+model_pkl = 'bi-lstm.pkl'
+parameters_pkl = 'bi-lstm-parameters.pkl'
+optimizer_pkl = 'bi-lstm-optimizer.pkl'
 num_layers = 2
 input_size = 28
 hidden_size = 64
@@ -42,19 +42,19 @@ class Net(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers):
         super().__init__()
         # 将batch维度放到最顶层
-        self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, 10)
+        self.bi_lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, bidirectional=True)
+        self.fc = nn.Linear(2 * hidden_size, 10)
 
     def forward(self, x):
-        outputs, hns = self.rnn(x)
+        outputs, (hns, cns) = self.bi_lstm(x)
         # 取输出的向量outputs中的最后一个向量最为最终输出
         x = outputs[:, -1, :]
         x = self.fc(x)
         return x
 
 
-# 可视化 tensorboard --logdir=runs-rnn --bind_all
-writer = SummaryWriter(logdir='runs-rnn')
+# 可视化 tensorboard --logdir=runs-bi-lstm --bind_all
+writer = SummaryWriter(logdir='runs-bi-lstm')
 # 设备
 # 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 filename.py
 # 程序中会对可见GPU重新从0编号

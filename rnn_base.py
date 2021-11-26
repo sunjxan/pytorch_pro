@@ -65,32 +65,6 @@ class RNN(nn.Module):
     def forward(self, inputs, hxs=None):
         hns = []
         for i in range(self.num_layers):
-            inputs, hn = self.layers[i](inputs, hxs and hxs[i])
+            inputs, hn = self.layers[i](inputs, None if hxs is None else hxs[i])
             hns.append(hn)
         return inputs, torch.stack(hns)
-
-
-from collections import OrderedDict
-
-input = torch.randn(5, 2, 3)
-h0 = torch.randn(2, 2, 4)
-
-# 验证
-rnn = RNN(3, 4, 2)
-L = [list(cell.parameters()) for cell in rnn.layers]
-size = len(L)
-D = []
-for i in range(size):
-    D.append(['weight_ih_l' + str(i), L[i][0]])
-    D.append(['weight_hh_l' + str(i), L[i][2]])
-    D.append(['bias_ih_l' + str(i), L[i][1]])
-    D.append(['bias_hh_l' + str(i), L[i][3]])
-D = OrderedDict(D)
-
-# PyTorch RNN
-rnn2 = nn.RNN(3, 4, 2)
-rnn2.load_state_dict(D)
-
-output, hn = rnn(input, h0)
-output2, hn2 = rnn2(input, h0)
-print(torch.all(output == output2), torch.all(hn == hn2))
