@@ -11,7 +11,7 @@ import os, time
 model_pkl = 'inception.pkl'
 parameters_pkl = 'inception-parameters.pkl'
 optimizer_pkl = 'inception-optimizer.pkl'
-epochs = 200
+epochs = 100
 batch_size_train = 100
 batch_size_val = 1000
 learning_rate = 1e-3
@@ -416,8 +416,8 @@ def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
             epoch_correct_images += step_correct_images
 
             if step_index % log_interval_steps == 0:
-                torch.save(model.state_dict(), 'inception-parameters.pkl')
-                torch.save(optimizer.state_dict(), 'inception-optimizer.pkl')
+                torch.save(model.state_dict(), parameters_pkl)
+                torch.save(optimizer.state_dict(), optimizer_pkl)
 
                 writer.add_scalar('train/loss', step_loss, global_step)
                 writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)
@@ -498,5 +498,5 @@ evaluate(model)
 
 
 torch.save(model, model_pkl)
-writer.add_graph(model, torch.zeros(1, 3, 64, 64).to(device))
+writer.add_graph(model, torch.zeros(1, 3, 320, 320).to(device))
 writer.close()
