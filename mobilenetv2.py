@@ -1,68 +1,61 @@
 import torch
-import warnings
+import torchvision as tv
+import torch.nn as nn
+import torch.optim as optim
+from tensorboardX import SummaryWriter
 
-from functools import partial
-from torch import nn
-from torch import Tensor
-from .._internally_replaced_utils import load_state_dict_from_url
-from ..ops.misc import ConvNormActivation
-from ._utils import _make_divisible
-from typing import Callable, Any, Optional, List
+from torchvision.ops.misc import ConvNormActivation
+from torchvision._utils import _make_divisible
 
-
-__all__ = ['MobileNetV2', 'mobilenet_v2']
+import os, time
 
 
-model_urls = {
-    'mobilenet_v2': 'https://download.pytorch.org/models/mobilenet_v2-b0353104.pth',
-}
+model_pkl = 'mobilenet_v2.pkl'
+parameters_pkl = 'mobilenet_v2-parameters.pkl'
+optimizer_pkl = 'mobilenet_v2-optimizer.pkl'
+epochs = 200
+batch_size_train = 100
+batch_size_val = 1000
+learning_rate = 1e-3
+log_interval_steps = 250
+# 对于可重复的实验，设置随机种子
+torch.manual_seed(seed=1)
 
 
-# necessary for backwards compatibility
-class _DeprecatedConvBNAct(ConvNormActivation):
-    def __init__(self, *args, **kwargs):
-        warnings.warn(
-            "The ConvBNReLU/ConvBNActivation classes are deprecated and will be removed in future versions. "
-            "Use torchvision.ops.misc.ConvNormActivation instead.", FutureWarning)
-        if kwargs.get("norm_layer", None) is None:
-            kwargs["norm_layer"] = nn.BatchNorm2d
-        if kwargs.get("activation_layer", None) is None:
-            kwargs["activation_layer"] = nn.ReLU6
-        super().__init__(*args, **kwargs)
-
-
-ConvBNReLU = _DeprecatedConvBNAct
-ConvBNActivation = _DeprecatedConvBNAct
+# 转换器，将PIL Image转换为Tensor
+transform = tv.transforms.Compose([tv.transforms.ToTensor()])
+# 训练集（有标签），(100000, 2, 3, 64, 64)
+train_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/train', transform=transform)
+# 验证集（有标签），(10000, 2, 3, 64, 64)
+val_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/val', transform=transform)
+# 测试集（无标签），(10000, 2, 3, 64, 64)
+test_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/test', transform=transform)
+# 训练数据生成器，先随机打乱，然后按batch_size分批，样本不重不漏，最后一个batch样本数量可能不足batch_size
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size_train, shuffle=True)
+# 测试数据生成器
+val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size_val, shuffle=False)
 
 
 class InvertedResidual(nn.Module):
-    def __init__(
-        self,
-        inp: int,
-        oup: int,
-        stride: int,
-        expand_ratio: int,
-        norm_layer: Optional[Callable[..., nn.Module]] = None
-    ) -> None:
-        super(InvertedResidual, self).__init__()
-        self.stride = stride
-        assert stride in [1, 2]
+    def __init__(self, inp, oup, stride, expand_ratio, norm_layer=None):
+        super().__init__()
 
+        assert stride in [1, 2]
+        self.stride = stride
+        
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
 
         hidden_dim = int(round(inp * expand_ratio))
         self.use_res_connect = self.stride == 1 and inp == oup
 
-        layers: List[nn.Module] = []
+        layers = []
         if expand_ratio != 1:
             # pw
-            layers.append(ConvNormActivation(inp, hidden_dim, kernel_size=1, norm_layer=norm_layer,
-                                             activation_layer=nn.ReLU6))
+            layers.append(ConvNormActivation(inp, hidden_dim, kernel_size=1, norm_layer=norm_layer, activation_layer=nn.ReLU6))
         layers.extend([
             # dw
-            ConvNormActivation(hidden_dim, hidden_dim, stride=stride, groups=hidden_dim, norm_layer=norm_layer,
-                               activation_layer=nn.ReLU6),
+            ConvNormActivation(hidden_dim, hidden_dim, stride=stride, groups=hidden_dim, norm_layer=norm_layer, activation_layer=nn.ReLU6),
             # pw-linear
             nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
             norm_layer(oup),
@@ -71,37 +64,15 @@ class InvertedResidual(nn.Module):
         self.out_channels = oup
         self._is_cn = stride > 1
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x):
         if self.use_res_connect:
             return x + self.conv(x)
         else:
             return self.conv(x)
 
-
 class MobileNetV2(nn.Module):
-    def __init__(
-        self,
-        num_classes: int = 1000,
-        width_mult: float = 1.0,
-        inverted_residual_setting: Optional[List[List[int]]] = None,
-        round_nearest: int = 8,
-        block: Optional[Callable[..., nn.Module]] = None,
-        norm_layer: Optional[Callable[..., nn.Module]] = None
-    ) -> None:
-        """
-        MobileNet V2 main class
-
-        Args:
-            num_classes (int): Number of classes
-            width_mult (float): Width multiplier - adjusts number of channels in each layer by this amount
-            inverted_residual_setting: Network structure
-            round_nearest (int): Round the number of channels in each layer to be a multiple of this number
-            Set to 1 to turn off rounding
-            block: Module specifying inverted residual building block for mobilenet
-            norm_layer: Module specifying the normalization layer to use
-
-        """
-        super(MobileNetV2, self).__init__()
+    def __init__(self, num_classes=1000, width_mult=1.0, inverted_residual_setting=None, round_nearest=8, block=None, norm_layer=None):
+        super().__init__()
 
         if block is None:
             block = InvertedResidual
@@ -126,34 +97,31 @@ class MobileNetV2(nn.Module):
 
         # only check the first element, assuming user knows t,c,n,s are required
         if len(inverted_residual_setting) == 0 or len(inverted_residual_setting[0]) != 4:
-            raise ValueError("inverted_residual_setting should be non-empty "
-                             "or a 4-element list, got {}".format(inverted_residual_setting))
+            raise ValueError("inverted_residual_setting should be non-empty or a 4-element list, got {}".format(inverted_residual_setting))
 
-        # building first layer
         input_channel = _make_divisible(input_channel * width_mult, round_nearest)
         self.last_channel = _make_divisible(last_channel * max(1.0, width_mult), round_nearest)
-        features: List[nn.Module] = [ConvNormActivation(3, input_channel, stride=2, norm_layer=norm_layer,
-                                                        activation_layer=nn.ReLU6)]
-        # building inverted residual blocks
+        features = [ConvNormActivation(3, input_channel, stride=2, norm_layer=norm_layer, activation_layer=nn.ReLU6)]
+
         for t, c, n, s in inverted_residual_setting:
             output_channel = _make_divisible(c * width_mult, round_nearest)
             for i in range(n):
                 stride = s if i == 0 else 1
                 features.append(block(input_channel, output_channel, stride, expand_ratio=t, norm_layer=norm_layer))
                 input_channel = output_channel
-        # building last several layers
-        features.append(ConvNormActivation(input_channel, self.last_channel, kernel_size=1, norm_layer=norm_layer,
-                                           activation_layer=nn.ReLU6))
-        # make it nn.Sequential
+
+        features.append(ConvNormActivation(input_channel, self.last_channel, kernel_size=1, norm_layer=norm_layer, activation_layer=nn.ReLU6))
+
         self.features = nn.Sequential(*features)
 
-        # building classifier
         self.classifier = nn.Sequential(
             nn.Dropout(0.2),
             nn.Linear(self.last_channel, num_classes),
         )
 
-        # weight initialization
+        self._initialize_weights()
+
+    def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out')
@@ -166,32 +134,169 @@ class MobileNetV2(nn.Module):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.zeros_(m.bias)
 
-    def _forward_impl(self, x: Tensor) -> Tensor:
-        # This exists since TorchScript doesn't support inheritance, so the superclass method
-        # (this one) needs to have a name other than `forward` that can be accessed in a subclass
+    def forward(self, x):
         x = self.features(x)
-        # Cannot use "squeeze" as batch-size can be 1
         x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
         x = torch.flatten(x, 1)
         x = self.classifier(x)
         return x
 
-    def forward(self, x: Tensor) -> Tensor:
-        return self._forward_impl(x)
+# PyTorch版本不同预训练权重地址可能不同
+model_urls = {
+    'mobilenet_v2': 'https://download.pytorch.org/models/mobilenet_v2-b0353104.pth',
+}
 
 
-def mobilenet_v2(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> MobileNetV2:
-    """
-    Constructs a MobileNetV2 architecture from
-    `"MobileNetV2: Inverted Residuals and Linear Bottlenecks" <https://arxiv.org/abs/1801.04381>`_.
+# 可视化 tensorboard --logdir=runs-mobilenet_v2 --bind_all
+writer = SummaryWriter(logdir='runs-mobilenet_v2')
+# 设备
+# 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 filename.py
+# 程序中会对可见GPU重新从0编号
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+if device.type == 'cuda':
+    device_count = torch.cuda.device_count()
+    print('use {} gpu(s)'.format(device_count))
+else:
+    print('use cpu')
+# 模型
+if os.path.isfile(parameters_pkl):
+    model = MobileNetV2(init_weights=False)
+    model.load_state_dict(torch.load(parameters_pkl))
+else:
+    model = MobileNetV2()
+if device.type == 'cuda' and device_count > 1:
+    model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
+model = model.to(device)
+# 损失函数
+criterion = nn.CrossEntropyLoss()
+# 优化器
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+if os.path.isfile(optimizer_pkl):
+    optimizer.load_state_dict(torch.load(optimizer_pkl))
 
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    model = MobileNetV2(**kwargs)
-    if pretrained:
-        state_dict = load_state_dict_from_url(model_urls['mobilenet_v2'],
-                                              progress=progress)
-        model.load_state_dict(state_dict)
-    return model
+
+def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
+    global global_step
+
+    # 设置model.training为True
+    model.train()
+
+    steps_per_epoch = len(train_loader)
+    total_train_images = len(train_set)
+
+    for epoch_index in range(initial_epoch, initial_epoch + epochs):
+        print('Train Epoch {}/{}'.format(epoch_index, initial_epoch + epochs - 1))
+        print('-' * 20)
+
+        epoch_loss_sum = 0
+        epoch_correct_images = 0
+        epoch_begin = time.time()
+
+        for step_index, (images, labels) in enumerate(train_loader, 1):
+            step_input_images = images.shape[0]
+
+            step_begin = time.time()
+
+            images = images.to(device)
+            labels = labels.to(device)
+
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            step_end = time.time()
+            step_period = round((step_end - step_begin) * 1e3)
+
+            global_step += 1
+            step_loss = loss.item()
+            epoch_loss_sum += step_loss * step_input_images
+            step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
+            epoch_correct_images += step_correct_images
+            
+            if step_index % log_interval_steps == 0:
+                torch.save(model.state_dict(), parameters_pkl)
+                torch.save(optimizer.state_dict(), optimizer_pkl)
+
+                writer.add_scalar('train/loss', step_loss, global_step)
+                writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)
+
+                print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+
+        epoch_end = time.time()
+        epoch_period = round((epoch_end - epoch_begin) * 1e3)
+
+        print('-' * 20)
+        print('Train Epoch {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index, initial_epoch + epochs - 1, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
+        print()
+
+    if baseline:
+        steps_total_val = len(val_loader)
+        baseline_loss = epoch_loss_sum / total_train_images
+        baseline_accuracy = epoch_correct_images / total_train_images
+        for i in range(1, steps_total_val + 1):
+            writer.add_scalars('test/loss', {'baseline': baseline_loss}, i)
+            writer.add_scalars('test/accuracy', {'baseline': baseline_accuracy}, i)
+
+global_step = 0
+fit(model, optimizer, epochs)
+
+
+def evaluate(model):
+    global global_step
+
+    # 设置model.training为False
+    model.eval()
+
+    steps_total = len(val_loader)
+    total_loss_sum = 0
+    total_correct_images = 0
+    total_input_images = 0
+
+    with torch.no_grad():
+        print('Eval')
+        print('-' * 20)
+
+        val_begin = time.time()
+
+        for step_index, (images, labels) in enumerate(val_loader, 1):
+            step_input_images = images.shape[0]
+            total_input_images += step_input_images
+
+            step_begin = time.time()
+
+            images = images.to(device)
+            labels = labels.to(device)
+
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+
+            step_end = time.time()
+            step_period = round((step_end - step_begin) * 1e3)
+
+            global_step += 1
+            step_loss = loss.item()
+            total_loss_sum += step_loss * step_input_images
+            step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
+            total_correct_images += step_correct_images
+
+            writer.add_scalars('validate/loss', {'current': step_loss, 'average': total_loss_sum / total_input_images}, global_step)
+            writer.add_scalars('validate/accuracy', {'current': step_correct_images / step_input_images, 'average': total_correct_images / total_input_images}, global_step)
+
+            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+
+        val_end = time.time()
+        val_period = round((val_end - val_begin) * 1e3)
+
+        print('-' * 20)
+        print('Eval  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(int(val_period / 1e3), val_period % 1e3, total_loss_sum / total_input_images, total_correct_images, total_input_images, 1e2 * total_correct_images / total_input_images))
+        print()
+
+global_step = 0
+evaluate(model)
+
+
+torch.save(model, model_pkl)
+writer.add_graph(model, torch.zeros(1, 3, 64, 64).to(device))
+writer.close()
