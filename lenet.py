@@ -53,12 +53,11 @@ class LeNet(nn.Module):
             nn.ReLU(True),
             nn.MaxPool2d(kernel_size=2, stride=2),
             # N x 16 x 5 x 5
+            nn.Conv2d(16, 120, kernel_size=5),
+            # N x 120 x 1 x 1
+            nn.ReLU(True),
         )
         self.classifier = nn.Sequential(
-            # N x 400
-            nn.Linear(16 * 5 * 5, 120),
-            # N x 120
-            nn.ReLU(True),
             nn.Linear(120, 84),
             # N x 84
             nn.ReLU(True),
