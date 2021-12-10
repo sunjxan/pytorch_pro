@@ -1,39 +1,44 @@
-import warnings
-
 import torch
-from torch import Tensor
+import torchvision as tv
 import torch.nn as nn
-from .._internally_replaced_utils import load_state_dict_from_url
-from typing import Any, Dict, List
+import torch.optim as optim
+from tensorboardX import SummaryWriter
 
-__all__ = ['MNASNet', 'mnasnet0_5', 'mnasnet0_75', 'mnasnet1_0', 'mnasnet1_3']
+import os, time, warnings
 
-_MODEL_URLS = {
-    "mnasnet0_5":
-    "https://download.pytorch.org/models/mnasnet0.5_top1_67.823-3ffadce67e.pth",
-    "mnasnet0_75": None,
-    "mnasnet1_0":
-    "https://download.pytorch.org/models/mnasnet1.0_top1_73.512-f206786ef8.pth",
-    "mnasnet1_3": None
-}
 
-# Paper suggests 0.9997 momentum, for TensorFlow. Equivalent PyTorch momentum is
-# 1.0 - tensorflow.
+model_pkl = 'mnasnet.pkl'
+parameters_pkl = 'mnasnet-parameters.pkl'
+optimizer_pkl = 'mnasnet-optimizer.pkl'
+epochs = 200
+batch_size_train = 100
+batch_size_val = 1000
+learning_rate = 1e-3
+log_interval_steps = 250
+# 对于可重复的实验，设置随机种子
+torch.manual_seed(seed=1)
+
+
+# 转换器，将PIL Image转换为Tensor
+transform = tv.transforms.Compose([tv.transforms.ToTensor()])
+# 训练集（有标签），(100000, 2, 3, 64, 64)
+train_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/train', transform=transform)
+# 验证集（有标签），(10000, 2, 3, 64, 64)
+val_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/val', transform=transform)
+# 测试集（无标签），(10000, 2, 3, 64, 64)
+test_set = tv.datasets.ImageFolder(root='./data/tiny-imagenet-200/test', transform=transform)
+# 训练数据生成器，先随机打乱，然后按batch_size分批，样本不重不漏，最后一个batch样本数量可能不足batch_size
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size_train, shuffle=True)
+# 测试数据生成器
+val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size_val, shuffle=False)
+
+
 _BN_MOMENTUM = 1 - 0.9997
-
 
 class _InvertedResidual(nn.Module):
 
-    def __init__(
-        self,
-        in_ch: int,
-        out_ch: int,
-        kernel_size: int,
-        stride: int,
-        expansion_factor: int,
-        bn_momentum: float = 0.1
-    ) -> None:
-        super(_InvertedResidual, self).__init__()
+    def __init__(self, in_ch, out_ch, kernel_size, stride, expansion_factor, bn_momentum=0.1):
+        super().__init__()
         assert stride in [1, 2]
         assert kernel_size in [3, 5]
         mid_ch = in_ch * expansion_factor
@@ -44,37 +49,30 @@ class _InvertedResidual(nn.Module):
             nn.BatchNorm2d(mid_ch, momentum=bn_momentum),
             nn.ReLU(inplace=True),
             # Depthwise
-            nn.Conv2d(mid_ch, mid_ch, kernel_size, padding=kernel_size // 2,
-                      stride=stride, groups=mid_ch, bias=False),
+            nn.Conv2d(mid_ch, mid_ch, kernel_size, padding=kernel_size // 2, stride=stride, groups=mid_ch, bias=False),
             nn.BatchNorm2d(mid_ch, momentum=bn_momentum),
             nn.ReLU(inplace=True),
             # Linear pointwise. Note that there's no activation.
             nn.Conv2d(mid_ch, out_ch, 1, bias=False),
             nn.BatchNorm2d(out_ch, momentum=bn_momentum))
 
-    def forward(self, input: Tensor) -> Tensor:
+    def forward(self, x):
         if self.apply_residual:
-            return self.layers(input) + input
+            return self.layers(x) + x
         else:
-            return self.layers(input)
+            return self.layers(x)
 
-
-def _stack(in_ch: int, out_ch: int, kernel_size: int, stride: int, exp_factor: int, repeats: int,
-           bn_momentum: float) -> nn.Sequential:
+def _stack(in_ch, out_ch, kernel_size, stride, exp_factor, repeats, bn_momentum):
     """ Creates a stack of inverted residuals. """
     assert repeats >= 1
     # First one has no skip, because feature map size changes.
-    first = _InvertedResidual(in_ch, out_ch, kernel_size, stride, exp_factor,
-                              bn_momentum=bn_momentum)
+    first = _InvertedResidual(in_ch, out_ch, kernel_size, stride, exp_factor, bn_momentum=bn_momentum)
     remaining = []
     for _ in range(1, repeats):
-        remaining.append(
-            _InvertedResidual(out_ch, out_ch, kernel_size, 1, exp_factor,
-                              bn_momentum=bn_momentum))
+        remaining.append(_InvertedResidual(out_ch, out_ch, kernel_size, 1, exp_factor, bn_momentum=bn_momentum))
     return nn.Sequential(first, *remaining)
 
-
-def _round_to_multiple_of(val: float, divisor: int, round_up_bias: float = 0.9) -> int:
+def _round_to_multiple_of(val, divisor, round_up_bias=0.9):
     """ Asymmetric rounding to make `val` divisible by `divisor`. With default
     bias, will round up, unless the number is no more than 10% greater than the
     smaller divisible value, i.e. (83, 8) -> 80, but (84, 8) -> 88. """
@@ -82,35 +80,17 @@ def _round_to_multiple_of(val: float, divisor: int, round_up_bias: float = 0.9) 
     new_val = max(divisor, int(val + divisor / 2) // divisor * divisor)
     return new_val if new_val >= round_up_bias * val else new_val + divisor
 
-
-def _get_depths(alpha: float) -> List[int]:
+def _get_depths(alpha):
     """ Scales tensor depths as in reference MobileNet code, prefers rouding up
     rather than down. """
     depths = [32, 16, 24, 40, 80, 96, 192, 320]
     return [_round_to_multiple_of(depth * alpha, 8) for depth in depths]
 
-
 class MNASNet(torch.nn.Module):
-    """ MNASNet, as described in https://arxiv.org/pdf/1807.11626.pdf. This
-    implements the B1 variant of the model.
-    >>> model = MNASNet(1.0, num_classes=1000)
-    >>> x = torch.rand(1, 3, 224, 224)
-    >>> y = model(x)
-    >>> y.dim()
-    2
-    >>> y.nelement()
-    1000
-    """
-    # Version 2 adds depth scaling in the initial stages of the network.
     _version = 2
 
-    def __init__(
-        self,
-        alpha: float,
-        num_classes: int = 1000,
-        dropout: float = 0.2
-    ) -> None:
-        super(MNASNet, self).__init__()
+    def __init__(self, alpha, num_classes=1000, dropout=0.2, init_weights=True):
+        super().__init__()
         assert alpha > 0.0
         self.alpha = alpha
         self.num_classes = num_classes
@@ -121,8 +101,7 @@ class MNASNet(torch.nn.Module):
             nn.BatchNorm2d(depths[0], momentum=_BN_MOMENTUM),
             nn.ReLU(inplace=True),
             # Depthwise separable, no skip.
-            nn.Conv2d(depths[0], depths[0], 3, padding=1, stride=1,
-                      groups=depths[0], bias=False),
+            nn.Conv2d(depths[0], depths[0], 3, padding=1, stride=1, groups=depths[0], bias=False),
             nn.BatchNorm2d(depths[0], momentum=_BN_MOMENTUM),
             nn.ReLU(inplace=True),
             nn.Conv2d(depths[0], depths[1], 1, padding=0, stride=1, bias=False),
@@ -140,33 +119,34 @@ class MNASNet(torch.nn.Module):
             nn.ReLU(inplace=True),
         ]
         self.layers = nn.Sequential(*layers)
-        self.classifier = nn.Sequential(nn.Dropout(p=dropout, inplace=True),
-                                        nn.Linear(1280, num_classes))
-        self._initialize_weights()
+        self.classifier = nn.Sequential(
+            nn.Dropout(p=dropout, inplace=True),
+            nn.Linear(1280, num_classes)
+        )
 
-    def forward(self, x: Tensor) -> Tensor:
+        if init_weights:
+            self._initialize_weights()
+
+    def forward(self, x):
         x = self.layers(x)
         # Equivalent to global avgpool and removing H and W dimensions.
         x = x.mean([2, 3])
         return self.classifier(x)
 
-    def _initialize_weights(self) -> None:
+    def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out",
-                                        nonlinearity="relu")
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.ones_(m.weight)
                 nn.init.zeros_(m.bias)
             elif isinstance(m, nn.Linear):
-                nn.init.kaiming_uniform_(m.weight, mode="fan_out",
-                                         nonlinearity="sigmoid")
+                nn.init.kaiming_uniform_(m.weight, mode="fan_out", nonlinearity="sigmoid")
                 nn.init.zeros_(m.bias)
 
-    def _load_from_state_dict(self, state_dict: Dict, prefix: str, local_metadata: Dict, strict: bool,
-                              missing_keys: List[str], unexpected_keys: List[str], error_msgs: List[str]) -> None:
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
         version = local_metadata.get("version", None)
         assert version in [1, 2]
 
@@ -201,75 +181,175 @@ class MNASNet(torch.nn.Module):
                 "transfer learning from an updated ImageNet checkpoint.",
                 UserWarning)
 
-        super(MNASNet, self)._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys,
-            unexpected_keys, error_msgs)
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+
+# PyTorch版本不同预训练权重地址可能不同
+model_urls = {
+    "mnasnet0_5": "https://download.pytorch.org/models/mnasnet0.5_top1_67.823-3ffadce67e.pth",
+    "mnasnet0_75": None,
+    "mnasnet1_0": "https://download.pytorch.org/models/mnasnet1.0_top1_73.512-f206786ef8.pth",
+    "mnasnet1_3": None
+}
+
+# mnasnet0_5 = MNASNet(0.5)
+# mnasnet0_75 = MNASNet(0.75)
+# mnasnet1_0 = MNASNet(1.0)
+# mnasnet1_3 = MNASNet(1.3)
 
 
-def _load_pretrained(model_name: str, model: nn.Module, progress: bool) -> None:
-    if model_name not in _MODEL_URLS or _MODEL_URLS[model_name] is None:
-        raise ValueError(
-            "No checkpoint is available for model type {}".format(model_name))
-    checkpoint_url = _MODEL_URLS[model_name]
-    model.load_state_dict(
-        load_state_dict_from_url(checkpoint_url, progress=progress))
+# 可视化 tensorboard --logdir=runs-mnasnet --bind_all
+writer = SummaryWriter(logdir='runs-mnasnet')
+# 设备
+# 执行前设置环境变量 CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" python3 filename.py
+# 程序中会对可见GPU重新从0编号
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+if device.type == 'cuda':
+    device_count = torch.cuda.device_count()
+    print('use {} gpu(s)'.format(device_count))
+else:
+    print('use cpu')
+# 模型
+if os.path.isfile(parameters_pkl):
+    model = MNASNet(0.5, init_weights=False)
+    model.load_state_dict(torch.load(parameters_pkl))
+    print('parameters loaded')
+else:
+    model = MNASNet(0.5)
+if device.type == 'cuda' and device_count > 1:
+    model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
+model = model.to(device)
+# 损失函数
+criterion = nn.CrossEntropyLoss()
+# 优化器
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+if os.path.isfile(optimizer_pkl):
+    optimizer.load_state_dict(torch.load(optimizer_pkl))
+    print('optimizer loaded')
 
 
-def mnasnet0_5(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> MNASNet:
-    r"""MNASNet with depth multiplier of 0.5 from
-    `"MnasNet: Platform-Aware Neural Architecture Search for Mobile"
-    <https://arxiv.org/pdf/1807.11626.pdf>`_.
+def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
+    global global_step
 
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    model = MNASNet(0.5, **kwargs)
-    if pretrained:
-        _load_pretrained("mnasnet0_5", model, progress)
-    return model
+    # 设置model.training为True
+    model.train()
+
+    steps_per_epoch = len(train_loader)
+    total_train_images = len(train_set)
+
+    for epoch_index in range(initial_epoch, initial_epoch + epochs):
+        print('Train Epoch {}/{}'.format(epoch_index, initial_epoch + epochs - 1))
+        print('-' * 20)
+
+        epoch_loss_sum = 0
+        epoch_correct_images = 0
+        epoch_begin = time.time()
+
+        for step_index, (images, labels) in enumerate(train_loader, 1):
+            step_input_images = images.shape[0]
+
+            step_begin = time.time()
+
+            images = images.to(device)
+            labels = labels.to(device)
+
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            step_end = time.time()
+            step_period = round((step_end - step_begin) * 1e3)
+
+            global_step += 1
+            step_loss = loss.item()
+            epoch_loss_sum += step_loss * step_input_images
+            step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
+            epoch_correct_images += step_correct_images
+            
+            if step_index % log_interval_steps == 0:
+                torch.save(model.state_dict(), parameters_pkl)
+                torch.save(optimizer.state_dict(), optimizer_pkl)
+
+                writer.add_scalar('train/loss', step_loss, global_step)
+                writer.add_scalar('train/accuracy', step_correct_images / step_input_images, global_step)
+
+                print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index, steps_per_epoch, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+
+        epoch_end = time.time()
+        epoch_period = round((epoch_end - epoch_begin) * 1e3)
+
+        print('-' * 20)
+        print('Train Epoch {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(epoch_index, initial_epoch + epochs - 1, int(epoch_period / 1e3), epoch_period % 1e3, epoch_loss_sum / total_train_images, epoch_correct_images, total_train_images, 1e2 * epoch_correct_images / total_train_images))
+        print()
+
+    if baseline:
+        steps_total_val = len(val_loader)
+        baseline_loss = epoch_loss_sum / total_train_images
+        baseline_accuracy = epoch_correct_images / total_train_images
+        for i in range(1, steps_total_val + 1):
+            writer.add_scalars('test/loss', {'baseline': baseline_loss}, i)
+            writer.add_scalars('test/accuracy', {'baseline': baseline_accuracy}, i)
+
+global_step = 0
+fit(model, optimizer, epochs)
 
 
-def mnasnet0_75(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> MNASNet:
-    r"""MNASNet with depth multiplier of 0.75 from
-    `"MnasNet: Platform-Aware Neural Architecture Search for Mobile"
-    <https://arxiv.org/pdf/1807.11626.pdf>`_.
+def evaluate(model):
+    global global_step
 
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    model = MNASNet(0.75, **kwargs)
-    if pretrained:
-        _load_pretrained("mnasnet0_75", model, progress)
-    return model
+    # 设置model.training为False
+    model.eval()
+
+    steps_total = len(val_loader)
+    total_loss_sum = 0
+    total_correct_images = 0
+    total_input_images = 0
+
+    with torch.no_grad():
+        print('Eval')
+        print('-' * 20)
+
+        val_begin = time.time()
+
+        for step_index, (images, labels) in enumerate(val_loader, 1):
+            step_input_images = images.shape[0]
+            total_input_images += step_input_images
+
+            step_begin = time.time()
+
+            images = images.to(device)
+            labels = labels.to(device)
+
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+
+            step_end = time.time()
+            step_period = round((step_end - step_begin) * 1e3)
+
+            global_step += 1
+            step_loss = loss.item()
+            total_loss_sum += step_loss * step_input_images
+            step_correct_images = (torch.argmax(outputs, -1) == labels).sum().item()
+            total_correct_images += step_correct_images
+
+            writer.add_scalars('validate/loss', {'current': step_loss, 'average': total_loss_sum / total_input_images}, global_step)
+            writer.add_scalars('validate/accuracy', {'current': step_correct_images / step_input_images, 'average': total_correct_images / total_input_images}, global_step)
+
+            print('Step {}/{}  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(step_index, steps_total, int(step_period / 1e3), step_period % 1e3, step_loss, step_correct_images, step_input_images, 1e2 * step_correct_images / step_input_images))
+
+        val_end = time.time()
+        val_period = round((val_end - val_begin) * 1e3)
+
+        print('-' * 20)
+        print('Eval  Time: {:.0f}s {:.0f}ms  Loss: {:.4f}  Accuracy: {}/{} ({:.1f}%)'.format(int(val_period / 1e3), val_period % 1e3, total_loss_sum / total_input_images, total_correct_images, total_input_images, 1e2 * total_correct_images / total_input_images))
+        print()
+
+global_step = 0
+evaluate(model)
 
 
-def mnasnet1_0(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> MNASNet:
-    r"""MNASNet with depth multiplier of 1.0 from
-    `"MnasNet: Platform-Aware Neural Architecture Search for Mobile"
-    <https://arxiv.org/pdf/1807.11626.pdf>`_.
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    model = MNASNet(1.0, **kwargs)
-    if pretrained:
-        _load_pretrained("mnasnet1_0", model, progress)
-    return model
-
-
-def mnasnet1_3(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> MNASNet:
-    r"""MNASNet with depth multiplier of 1.3 from
-    `"MnasNet: Platform-Aware Neural Architecture Search for Mobile"
-    <https://arxiv.org/pdf/1807.11626.pdf>`_.
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    model = MNASNet(1.3, **kwargs)
-    if pretrained:
-        _load_pretrained("mnasnet1_3", model, progress)
-    return model
+torch.save(model, model_pkl)
+print('model saved')
+writer.add_graph(model, torch.zeros(1, 3, 64, 64).to(device))
+writer.close()
