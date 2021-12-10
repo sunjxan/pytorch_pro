@@ -68,6 +68,7 @@ else:
 model = Net(input_size, hidden_size, num_layers)
 if os.path.isfile(parameters_pkl):
     model.load_state_dict(torch.load(parameters_pkl))
+    print('parameters loaded')
 if device.type == 'cuda' and device_count > 1:
     model = nn.DataParallel(model, device_ids=list(range(device_count)), output_device=0)
 model = model.to(device)
@@ -77,6 +78,8 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 if os.path.isfile(optimizer_pkl):
     optimizer.load_state_dict(torch.load(optimizer_pkl))
+    print('optimizer loaded')
+
 
 def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
     global global_step
@@ -200,5 +203,6 @@ global_step = 0
 evaluate(model)
 
 torch.save(model, model_pkl)
+print('model saved')
 writer.add_graph(model, torch.zeros(1, 28, 28).to(device))
 writer.close()

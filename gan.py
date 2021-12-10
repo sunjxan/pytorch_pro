@@ -96,6 +96,7 @@ else:
 gan = GAN(image_size=(28, 28), noise_size=noise_size)
 if os.path.isfile(parameters_pkl):
     gan.load_state_dict(torch.load(parameters_pkl))
+    print('parameters loaded')
 if device.type == 'cuda' and device_count > 1:
     gan = nn.DataParallel(gan, device_ids=list(range(device_count)), output_device=0)
 gan = gan.to(device)
@@ -107,8 +108,10 @@ optimizer_G = optim.Adam(gan.G.parameters(), lr=learning_rate)
 optimizer_D = optim.Adam(gan.D.parameters(), lr=learning_rate)
 if os.path.isfile(optimizer_G_pkl):
     optimizer_G.load_state_dict(torch.load(optimizer_G_pkl))
+    print('optimizer_G loaded')
 if os.path.isfile(optimizer_D_pkl):
     optimizer_D.load_state_dict(torch.load(optimizer_D_pkl))
+    print('optimizer_D loaded')
 
 if os.path.isdir(images_dirname):
     os.system('rm -rf {:s}/*'.format(images_dirname))
@@ -291,5 +294,6 @@ evaluate(gan)
 
 
 torch.save(gan, model_pkl)
+print('model saved')
 writer.add_graph(gan, torch.zeros(1, noise_size).to(device))
 writer.close()

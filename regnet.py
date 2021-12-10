@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 
-from torchvision.ops import StochasticDepth
 from torchvision.ops.misc import ConvNormActivation, SqueezeExcitation
 
 import os, time, math
@@ -298,6 +297,7 @@ else:
 if os.path.isfile(parameters_pkl):
     model = RegNet(BlockParams.from_init_params(depth=16, w_0=48, w_a=27.89, w_m=2.09, group_width=8, se_ratio=0.25), norm_layer=partial(nn.BatchNorm2d, eps=1e-05, momentum=0.1), init_weights=False)
     model.load_state_dict(torch.load(parameters_pkl))
+    print('parameters loaded')
 else:
     model = RegNet(BlockParams.from_init_params(depth=16, w_0=48, w_a=27.89, w_m=2.09, group_width=8, se_ratio=0.25), norm_layer=partial(nn.BatchNorm2d, eps=1e-05, momentum=0.1))
 if device.type == 'cuda' and device_count > 1:
@@ -309,6 +309,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 if os.path.isfile(optimizer_pkl):
     optimizer.load_state_dict(torch.load(optimizer_pkl))
+    print('optimizer loaded')
 
 
 def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
@@ -434,5 +435,6 @@ evaluate(model)
 
 
 torch.save(model, model_pkl)
+print('model saved')
 writer.add_graph(model, torch.zeros(1, 3, 64, 64).to(device))
 writer.close()

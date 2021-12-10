@@ -247,6 +247,7 @@ else:
 if os.path.isfile(parameters_pkl):
     model = EfficientNet(_efficientnet_conf(width_mult=1.0, depth_mult=1.0), 0.2, init_weights=False)
     model.load_state_dict(torch.load(parameters_pkl))
+    print('parameters loaded')
 else:
     model = EfficientNet(_efficientnet_conf(width_mult=1.0, depth_mult=1.0), 0.2)
 if device.type == 'cuda' and device_count > 1:
@@ -258,6 +259,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 if os.path.isfile(optimizer_pkl):
     optimizer.load_state_dict(torch.load(optimizer_pkl))
+    print('optimizer loaded')
 
 
 def fit(model, optimizer, epochs, initial_epoch=1, baseline=True):
@@ -383,5 +385,6 @@ evaluate(model)
 
 
 torch.save(model, model_pkl)
+print('model saved')
 writer.add_graph(model, torch.zeros(1, 3, 64, 64).to(device))
 writer.close()
