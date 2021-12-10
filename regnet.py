@@ -7,7 +7,9 @@ from tensorboardX import SummaryWriter
 from torchvision.ops import StochasticDepth
 from torchvision.ops.misc import ConvNormActivation, SqueezeExcitation
 
-import os, time
+import os, time, math
+from functools import partial
+from collections import OrderedDict
 
 
 model_pkl = 'regnet.pkl'
@@ -247,6 +249,7 @@ class RegNet(nn.Module):
                 nn.init.normal_(m.weight, mean=0.0, std=0.01)
                 nn.init.zeros_(m.bias)
 
+# PyTorch版本不同预训练权重地址可能不同
 model_urls = {
     "regnet_y_400mf": "https://download.pytorch.org/models/regnet_y_400mf-c65dace8.pth",
     "regnet_y_800mf": "https://download.pytorch.org/models/regnet_y_800mf-1b27b58c.pth",

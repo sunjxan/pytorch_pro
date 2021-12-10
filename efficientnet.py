@@ -7,8 +7,9 @@ from tensorboardX import SummaryWriter
 from torchvision.ops import StochasticDepth
 from torchvision.ops.misc import ConvNormActivation, SqueezeExcitation
 
-import os, time
+import os, time, math, copy
 from functools import partial
+from typing import Sequence
 
 
 model_pkl = 'efficientnet.pkl'
@@ -207,6 +208,7 @@ def _efficientnet_conf(width_mult, depth_mult):
     ]
     return inverted_residual_setting
 
+# PyTorch版本不同预训练权重地址可能不同
 model_urls = {
     # Weights ported from https://github.com/rwightman/pytorch-image-models/
     "efficientnet_b0": "https://download.pytorch.org/models/efficientnet_b0_rwightman-3dd342df.pth",
