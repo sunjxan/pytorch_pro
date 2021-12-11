@@ -8,6 +8,7 @@ from torchvision.ops.misc import ConvNormActivation, SqueezeExcitation as SElaye
 
 import os, time
 from functools import partial
+from typing import Sequence
 
 
 model_pkl = 'mobilenet_v3.pkl'
@@ -181,8 +182,8 @@ class MobileNetV3(nn.Module):
 
 # PyTorch版本不同预训练权重地址可能不同
 model_urls = {
-    "mobilenet_v3_large": "https://download.pytorch.org/models/mobilenet_v3_large-8738ca79.pth",
     "mobilenet_v3_small": "https://download.pytorch.org/models/mobilenet_v3_small-047dcff4.pth",
+    "mobilenet_v3_large": "https://download.pytorch.org/models/mobilenet_v3_large-8738ca79.pth",
 }
 
 def _mobilenet_v3_conf(arch, width_mult = 1.0, reduced_tail = False, dilated = False):
